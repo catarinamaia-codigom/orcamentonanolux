@@ -21,7 +21,7 @@ No `index.html`, procure por `PRESETS` (catálogo de produtos), `INTRO_PADRAO` e
 ## Arquivos
 
 - `index.html`: interface, modelo das páginas e geração do PDF
-- `assets.js`: logos, QR Code do contrato e fonte embutidos
-- `lib/`: [html2canvas](https://github.com/niklasvh/html2canvas) 1.4.1 e [jsPDF](https://github.com/parallax/jsPDF) 4.2.1 (licença MIT)
+- `assets.js`: logos, QR Code do contrato e fonte embutidos (o PDF sai com texto real, selecionável)
+- `lib/`: [jsPDF](https://github.com/parallax/jsPDF) 4.2.1 (licença MIT)
 
 Fonte: Liberation Sans (SIL Open Font License 1.1), com as mesmas medidas da Arial.

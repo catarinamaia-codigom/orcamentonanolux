@@ -260,7 +260,6 @@ details.card[open] summary{margin-bottom:14px}
 <div id="overlay"><div class="spinner"></div><div id="ovtxt">Gerando PDF…</div></div>
 <div class="toast" id="toast"></div>
 
-<script src="lib/html2canvas.min.js"></script>
 <script src="lib/jspdf.umd.min.js"></script>
 <script>
 (function(){
@@ -585,38 +584,147 @@ function nomeArquivo(){
   var cli = (state.cliente || 'Cliente').trim();
   return ('NANOLUX_ORCAMENTO - ' + cli + ' - ' + (state.versao || 'V01') + ' - ' + state.numero).replace(/[\\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ') + '.pdf';
 }
+/* Desenha cada página no PDF a partir do layout real da pré-visualização:
+   textos como texto de verdade (fonte embutida), caixas, gradientes e imagens nas mesmas posições. */
+var K = 720 / 1500;
+function cor(str){
+  var m = /rgba?\(([^)]+)\)/.exec(str || ''); if (!m) return null;
+  var p = m[1].split(/[\s,\/]+/).filter(Boolean).map(parseFloat);
+  return {r:p[0], g:p[1], b:p[2], a:p.length > 3 ? p[3] : 1};
+}
+function raios(cs, w, h){
+  var lim = Math.min(w, h) / 2;
+  return [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomRightRadius, cs.borderBottomLeftRadius].map(function(v){ return Math.min(parseFloat(v) || 0, lim); });
+}
+function caminho(pdf, r, rr){
+  var x = r.x * K, y = r.y * K, w = r.w * K, h = r.h * K, k = 0.5523;
+  var tl = rr[0] * K, tr = rr[1] * K, br = rr[2] * K, bl = rr[3] * K;
+  pdf.moveTo(x + tl, y);
+  pdf.lineTo(x + w - tr, y);
+  if (tr) pdf.curveTo(x + w - tr + tr * k, y, x + w, y + tr - tr * k, x + w, y + tr);
+  pdf.lineTo(x + w, y + h - br);
+  if (br) pdf.curveTo(x + w, y + h - br + br * k, x + w - br + br * k, y + h, x + w - br, y + h);
+  pdf.lineTo(x + bl, y + h);
+  if (bl) pdf.curveTo(x + bl - bl * k, y + h, x, y + h - bl + bl * k, x, y + h - bl);
+  pdf.lineTo(x, y + tl);
+  if (tl) pdf.curveTo(x, y + tl - tl * k, x + tl - tl * k, y, x + tl, y);
+  pdf.close();
+}
+function gradienteJPG(css, w, h){
+  var cores = (css.match(/rgba?\([^)]+\)/g) || []).map(cor).filter(Boolean);
+  if (cores.length < 2) return null;
+  var ang = /(-?[\d.]+)deg/.exec(css), deg = ang ? parseFloat(ang[1]) : 180;
+  var f = 3, c = document.createElement('canvas');
+  c.width = Math.max(2, Math.round(w * f)); c.height = Math.max(2, Math.round(h * f));
+  var ctx = c.getContext('2d'), g = (Math.round(deg) % 180 === 90) ? ctx.createLinearGradient(0, 0, c.width, 0) : ctx.createLinearGradient(0, 0, 0, c.height);
+  cores.forEach(function(k, i){ g.addColorStop(i / (cores.length - 1), 'rgb(' + k.r + ',' + k.g + ',' + k.b + ')'); });
+  ctx.fillStyle = g; ctx.fillRect(0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.95);
+}
+function desenharPagina(pdf, pg, cache){
+  var pr = pg.getBoundingClientRect(), s = pr.width / 1500;
+  function R(rc){ return {x:(rc.left - pr.left) / s, y:(rc.top - pr.top) / s, w:rc.width / s, h:rc.height / s}; }
+  var range = document.createRange();
+  function texto(node, cs){
+    var t = node.data; if (!/\S/.test(t)) return;
+    var c = cor(cs.color) || {r:0, g:0, b:0}, px = parseFloat(cs.fontSize) || 12;
+    pdf.setFont('NX', (parseInt(cs.fontWeight, 10) || 400) >= 600 ? 'bold' : 'normal');
+    pdf.setFontSize(px * K); pdf.setTextColor(c.r, c.g, c.b);
+    function pinta(str, rc){
+      var r = R(rc); if (r.w <= 0) return;
+      pdf.text(str, r.x * K, (r.y + r.h * 0.8102) * K);
+    }
+    var re = /\S+/g, m;
+    while ((m = re.exec(t))) {
+      range.setStart(node, m.index); range.setEnd(node, m.index + m[0].length);
+      var rs = range.getClientRects();
+      if (rs.length === 1) pinta(m[0], rs[0]);
+      else for (var i = 0; i < m[0].length; i++) {
+        range.setStart(node, m.index + i); range.setEnd(node, m.index + i + 1);
+        var r1 = range.getClientRects(); if (r1.length) pinta(m[0][i], r1[0]);
+      }
+    }
+  }
+  function caixa(el, cs, r){
+    if (r.w <= 0 || r.h <= 0) return;
+    var rr = raios(cs, r.w, r.h), bg = cor(cs.backgroundColor), gi = cs.backgroundImage || '';
+    if (gi.indexOf('linear-gradient') >= 0) {
+      var img = gradienteJPG(gi, r.w, r.h);
+      if (img) {
+        pdf.saveGraphicsState(); caminho(pdf, r, rr); pdf.clip(); pdf.discardPath();
+        pdf.addImage(img, 'JPEG', r.x * K, r.y * K, r.w * K, r.h * K, undefined, 'FAST');
+        pdf.restoreGraphicsState();
+        return;
+      }
+    }
+    if (bg && bg.a > 0.01) {
+      var semi = bg.a < 0.999;
+      if (semi) { pdf.saveGraphicsState(); pdf.setGState(new pdf.GState({opacity:bg.a})); }
+      pdf.setFillColor(bg.r, bg.g, bg.b);
+      caminho(pdf, r, rr); pdf.fill();
+      if (semi) pdf.restoreGraphicsState();
+    }
+  }
+  function imagem(el, r){
+    var src = el.getAttribute('src') || '';
+    if (src === I.check) {
+      pdf.setDrawColor(12, 169, 138); pdf.setLineWidth(r.w * 0.15 * K); pdf.setLineCap('round'); pdf.setLineJoin('round');
+      var p = function(a, b){ return [(r.x + r.w * a / 20) * K, (r.y + r.h * b / 20) * K]; };
+      var a = p(4, 10.6), b = p(8.2, 14.6), c = p(16.4, 5.2);
+      pdf.moveTo(a[0], a[1]); pdf.lineTo(b[0], b[1]); pdf.lineTo(c[0], c[1]); pdf.stroke();
+      return;
+    }
+    if (!cache[src]) cache[src] = 'img' + Object.keys(cache).length;
+    pdf.addImage(src, src.indexOf('image/png') >= 0 ? 'PNG' : 'JPEG', r.x * K, r.y * K, r.w * K, r.h * K, cache[src], 'FAST');
+  }
+  function percorre(el, raiz){
+    var cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden') return;
+    var r = R(el.getBoundingClientRect());
+    if (el.tagName === 'IMG') { imagem(el, r); return; }
+    if (!raiz) caixa(el, cs, r);
+    var corta = !raiz && cs.overflow === 'hidden' && raios(cs, r.w, r.h).some(function(v){ return v > 0; });
+    if (corta) { pdf.saveGraphicsState(); caminho(pdf, r, raios(cs, r.w, r.h)); pdf.clip(); pdf.discardPath(); }
+    for (var n = el.firstChild; n; n = n.nextSibling) {
+      if (n.nodeType === 3) texto(n, cs);
+      else if (n.nodeType === 1) percorre(n, false);
+    }
+    if (corta) pdf.restoreGraphicsState();
+  }
+  pdf.setFillColor(255, 255, 255); pdf.rect(0, 0, 720, 405, 'F');
+  percorre(pg, true);
+  $$('[data-href]', pg).forEach(function(el){
+    var r = R(el.getBoundingClientRect());
+    pdf.link(r.x * K, r.y * K, r.w * K, r.h * K, {url:el.getAttribute('data-href')});
+  });
+}
 async function baixarPDF(){
   var btn = $('#btnPdf'), ov = $('#overlay'), stage = $('#stage');
-  if (!window.html2canvas || !window.jspdf) { alert('As bibliotecas de PDF não carregaram. Verifique a pasta "lib" e recarregue a página.'); return; }
+  if (!window.jspdf || !window.NX_FONT) { alert('A biblioteca de PDF não carregou. Verifique a pasta "lib" e recarregue a página.'); return; }
   btn.disabled = true; ov.classList.add('on');
-  var sx = window.scrollX, sy = window.scrollY;
   try {
     clearTimeout(tmr); salvar(); render();
     if (document.fonts && document.fonts.ready) await document.fonts.ready;
-    window.scrollTo(0, 0);
-    var pages = $$('#preview .pg'), K = 720 / 1500;
-    var pdf = new window.jspdf.jsPDF({orientation:'landscape', unit:'pt', format:[720, 405], compress:true});
+    var pages = $$('#preview .pg');
+    var pdf = new window.jspdf.jsPDF({orientation:'landscape', unit:'pt', format:[720, 405], compress:true, putOnlyUsedFonts:true});
+    pdf.addFileToVFS('NX-Regular.ttf', NX_FONT.r); pdf.addFont('NX-Regular.ttf', 'NX', 'normal');
+    pdf.addFileToVFS('NX-Bold.ttf', NX_FONT.b); pdf.addFont('NX-Bold.ttf', 'NX', 'bold');
+    var cache = {};
     for (var i = 0; i < pages.length; i++) {
       $('#ovtxt').textContent = 'Gerando PDF… página ' + (i + 1) + ' de ' + pages.length;
       var cl = pages[i].cloneNode(true); cl.style.transform = 'none'; cl.style.position = 'relative';
       stage.innerHTML = ''; stage.appendChild(cl);
       await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
-      var canvas = await window.html2canvas(cl, {scale:2, backgroundColor:'#ffffff', logging:false, useCORS:true, scrollX:0, scrollY:0, windowWidth:1500, windowHeight:844, width:1500, height:844});
       if (i > 0) pdf.addPage([720, 405], 'landscape');
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.93), 'JPEG', 0, 0, 720, 405, undefined, 'FAST');
-      var base = cl.getBoundingClientRect();
-      $$('[data-href]', cl).forEach(function(el){
-        var r = el.getBoundingClientRect();
-        pdf.link((r.left - base.left) * K, (r.top - base.top) * K, r.width * K, r.height * K, {url:el.getAttribute('data-href')});
-      });
+      desenharPagina(pdf, cl, cache);
     }
     pdf.setProperties({title:state.numero + ' - Apresentação Nanolux e proposta - ' + (state.cliente || 'Cliente'), subject:'Proposta comercial Nanolux', author:'SOMMAR Soluções Sustentáveis LTDA.', creator:'Gerador de orçamento Nanolux'});
-    pdf.save(nomeArquivo());
-    toast('PDF baixado: ' + nomeArquivo());
+    if (window.NX_NO_SAVE) { window.NX_LAST_PDF = pdf; }
+    else { pdf.save(nomeArquivo()); toast('PDF baixado: ' + nomeArquivo()); }
   } catch (err) {
     console.error(err); alert('Não foi possível gerar o PDF: ' + (err && err.message ? err.message : err));
   } finally {
-    stage.innerHTML = ''; ov.classList.remove('on'); btn.disabled = false; $('#ovtxt').textContent = 'Gerando PDF…'; window.scrollTo(sx, sy);
+    stage.innerHTML = ''; ov.classList.remove('on'); btn.disabled = false; $('#ovtxt').textContent = 'Gerando PDF…';
   }
 }
 $('#btnPdf').addEventListener('click', baixarPDF);
