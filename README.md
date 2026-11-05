@@ -6,13 +6,17 @@ Site para montar propostas comerciais Nanolux em PDF (formato apresentação 16:
 
 - **Início**: resumo (total de orçamentos, últimos 30 dias, este mês, última semana, % de conversão, tempo médio de conversão), alertas de orçamentos perto de vencer, comissão a receber no próximo mês e atalhos.
 - **Proposta comercial**: cliente, telefone (no PDF aparece "Nome | telefone"), projeto, local, link do Asana, itens, desconto e o PDF.
-  - **Calculadora de m² e comissão**: simulação das formas de pagamento, taxas da máquina, valor líquido, custos fixos, comissão e **m² efetivo** comparado à referência do produto. Se ficar abaixo, aparece o aviso de que precisa de autorização. A barra ajustável muda o valor do m² ao vivo, e o botão "Aplicar mínimo" leva direto ao menor valor sem autorização.
+  - **Calculadora de m² e comissão**: simulação das formas de pagamento, taxas da máquina, valor líquido, custos fixos, comissão e **m² efetivo** comparado à referência do produto. Se ficar abaixo, aparece o aviso de que precisa de autorização.
+  - Duas barras simulam ao vivo, sem mexer no orçamento até você aplicar: uma para o **valor do m²**, outra para o **desconto**. Os botões aplicam o valor escolhido, o **m² mínimo** ou o **desconto máximo** sem autorização.
+  - Ao digitar um cliente que já existe (mesmo nome ou telefone), o site pergunta se é um **projeto novo** ou a **atualização** do orçamento antigo. O topo mostra um resumo dos orçamentos anteriores desse cliente.
   - **Salvar** guarda o orçamento como *Rascunho* (amarelo). **Baixar PDF** muda para *PDF baixado* (verde).
-- **Histórico de orçamentos**: busca por nome, telefone, cidade ou número; filtros de data, status, validade e vendedor. As versões do mesmo cliente ficam no mesmo bloco de cor.
+- **Histórico de orçamentos**: resumo no topo, busca por nome, telefone, cidade ou número e filtros de data, status, validade e vendedor. As versões do mesmo cliente ficam no mesmo bloco de cor.
+  - A coluna do cliente fica fixa. O nome abre o cliente no Asana, e a tag **Asana ON/OFF** mostra se o link está vinculado (clique para vincular ou trocar).
   - As tags de validade são *Válido* (azul), *Vencido* e *Inválido · atualizado*.
   - A tabela mostra o desconto (nome e valor), o valor do m², o m² efetivo, o valor total, a simulação e o link do Asana.
   - **Atualizar** cria a próxima versão (V02, V03…) e invalida a anterior.
-  - **Faturar** pede as formas de pagamento (obrigatórias, cada uma com valor e data), recalcula a comissão e gera o texto para copiar no Grupo de Pagamentos do WhatsApp.
+  - **Faturar** pede as formas de pagamento (obrigatórias, cada uma com valor e data), recalcula a comissão, comemora a venda com uma animação diferente a cada vez e gera o texto para copiar no Grupo de Pagamentos do WhatsApp.
+  - **Alterar faturamento** exige um motivo e guarda o histórico (antes e depois).
 - **Comissões**: o vendedor vê só os dele; a Diretoria vê todos e um resumo por vendedor.
   - Gráfico das comissões por mês de faturamento.
   - Formas de pagamento mais usadas.
@@ -23,6 +27,7 @@ Site para montar propostas comerciais Nanolux em PDF (formato apresentação 16:
   - Cartão parcelado: comissão integral ou dividida pelas parcelas.
   - Taxas da máquina (PIX, Cartão 1x a 12x, Boleto, Transferência e Dinheiro).
   - Custo fixo por projeto e catálogo de produtos com preço padrão e **referência do m²**.
+  - **Textos padrão da proposta** (apresentação, observações, pagamento, prazo, execução, turnos, informações da pág. 2) e os exemplos dos campos vazios.
   - Links do Asana e do WhatsApp.
   - Cadastro de usuários (nome + PIN, papel Vendedor ou Diretoria).
 
@@ -54,7 +59,7 @@ O login é feito por nome + PIN. O PIN é guardado com hash e sal, e a sessão u
 
 ## Arquivos
 
-- `index.html`, `css/`, `js/`: o site (`proposta.js` monta o PDF; `historico.js`, `comissoes.js` e `diretoria.js` são as outras páginas)
+- `index.html`, `css/`, `js/`: o site (`proposta.js` monta o PDF; `historico.js`, `comissoes.js` e `diretoria.js` são as outras páginas; `festa.js` é a comemoração de venda)
 - `backend/Codigo.js`: o servidor do Apps Script, que também traz os cálculos de comissão e m² usados pelo site
 - `dev/gas-mock.js`: simulação da planilha para o modo demonstração
 - `assets.js`: logos, QR Code e fonte embutidos

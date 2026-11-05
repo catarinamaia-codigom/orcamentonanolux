@@ -171,6 +171,7 @@ function navegar() {
   var r = NX.rotaAtual(), def = ROTAS.filter(function (x) { return x.id === r; })[0];
   if (def.dir && !NX.eDiretor()) { NX.ir('inicio'); return; }
   document.body.classList.remove('menu');
+  NX.$$('.modal-bg').forEach(function (m) { if (m.parentNode) m.parentNode.removeChild(m); });
   NX.$$('.nav-a[data-rota]').forEach(function (a) { a.classList.toggle('on', a.dataset.rota === r); });
   var view = NX.$('#view'); view.innerHTML = '';
   window.scrollTo(0, 0);

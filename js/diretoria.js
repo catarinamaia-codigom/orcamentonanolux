@@ -24,6 +24,19 @@ NX.paginas.diretoria = function (view) {
       '<div class="card"><h2>Links</h2><div class="grid">' +
         '<label class="f full">Asana da SOMMAR (botão do menu)<input type="url" id="dAsana" placeholder="https://app.asana.com/…"></label>' +
         '<label class="f full">WhatsApp do botão “negociar” no PDF <span class="hint">(só números, com DDI)</span><input type="text" inputmode="numeric" id="dWa"></label></div></div>' +
+      '<div class="card"><h2>Textos padrão da proposta</h2><p class="muted" style="margin:-6px 0 12px;font-size:12.5px">Preenchem cada orçamento novo. O vendedor ainda pode ajustar em “Mais opções” e usar “restaurar padrão”.</p><div class="grid">' +
+        '<label class="f full">Texto de apresentação (quadro cinza da pág. 1)<textarea id="tIntro" rows="6"></textarea></label>' +
+        '<label class="f full">Observações do projeto<textarea id="tObs" rows="5"></textarea></label>' +
+        '<label class="f full">Pagamento (resumo)<input type="text" id="tPagR"></label>' +
+        '<label class="f full">Pagamento (detalhes)<textarea id="tPagD" rows="2"></textarea></label>' +
+        '<label class="f">Prazo estimado<input type="text" id="tPrazo"></label>' +
+        '<label class="f">Modalidade de execução<input type="text" id="tExec"></label>' +
+        '<div class="f full">Turnos marcados por padrão<div class="chips"><label class="chk"><input type="checkbox" data-tturno="Manhã"> Manhã</label><label class="chk"><input type="checkbox" data-tturno="Tarde"> Tarde</label><label class="chk"><input type="checkbox" data-tturno="Noite"> Noite</label></div></div>' +
+        '<label class="f full">Informações gerais da pág. 2 <span class="hint">(uma por linha; a validade, os turnos e a execução entram sozinhos)</span><textarea id="tInfos" rows="3"></textarea></label>' +
+        '<div class="full" style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:4px">Exemplos que aparecem nos campos vazios</div>' +
+        '<label class="f">Projeto<input type="text" id="tExProj"></label><label class="f">Local<input type="text" id="tExLocal"></label>' +
+        '<label class="f">Área / referência do item<input type="text" id="tExArea"></label><label class="f">Nome do desconto<input type="text" id="tExDesc"></label>' +
+      '</div></div>' +
     '</div><div style="display:flex;flex-direction:column;gap:16px">' +
       '<div class="card"><h2>Catálogo de produtos</h2><p class="muted" style="margin:-6px 0 12px;font-size:12.5px">Aparece na lista de itens da proposta. “Ref. m²” é o valor mínimo do m² efetivo sem autorização.</p><div id="dProd"></div><button class="btn add small" id="dProdAdd" type="button" style="margin-top:10px">+ Produto</button></div>' +
       '<div class="card"><h2>Usuários</h2><div id="dUsers"></div>' +
@@ -37,6 +50,11 @@ NX.paginas.diretoria = function (view) {
     '<div class="savebar"><div class="inner"><span class="muted" id="dMsg" style="font-size:12.5px">Alterações de comissão, taxas, custos, catálogo e links.</span><button class="btn primary" id="dSalvar" type="button">Salvar configurações</button></div></div></div>';
   $('#dPct').value = f2(cfg.comissaoPct); $('#dModo').value = cfg.modoParcelado; $('#dFixo').value = f2(cfg.custoFixo); $('#dVal').value = cfg.validadePadrao;
   $('#dFora').checked = cfg.descontarForaArea !== false; $('#dAsana').value = cfg.asanaUrl || ''; $('#dWa').value = cfg.whatsapp || '';
+  var tx = cfg.textos || {};
+  $('#tIntro').value = tx.intro || ''; $('#tObs').value = tx.obs || ''; $('#tPagR').value = tx.pagResumo || ''; $('#tPagD').value = tx.pagDetalhe || '';
+  $('#tPrazo').value = tx.prazo || ''; $('#tExec').value = tx.execucao || ''; $('#tInfos').value = (tx.infos || []).join('\n');
+  $('#tExProj').value = tx.exProjeto || ''; $('#tExLocal').value = tx.exLocal || ''; $('#tExArea').value = tx.exArea || ''; $('#tExDesc').value = tx.exDesconto || '';
+  $$('[data-tturno]').forEach(function (c) { c.checked = (tx.turnos || []).indexOf(c.dataset.tturno) >= 0; });
   $('#dTaxas').innerHTML = C.FORMAS.map(function (f) { return '<label class="f">' + esc(f) + '<input type="text" inputmode="decimal" data-tx="' + esc(f) + '" value="' + f2(num(cfg.taxas[f])) + '"></label>'; }).join('');
   produtos(); usuarios();
   $('#dProdAdd').onclick = function () { lerProdutos(); var k = 'novo-' + Math.random().toString(36).slice(2, 6); cfg.produtos[k] = { rotulo: 'Novo produto', nome: 'Novo produto', desc: '', unidade: 'un', valor: 0, ref: 0, contaArea: false }; produtos(); };
@@ -74,6 +92,10 @@ function salvarCfg() {
   cfg.validadePadrao = Math.max(1, Math.round(num($('#dVal').value) || 10)); cfg.descontarForaArea = $('#dFora').checked;
   cfg.asanaUrl = $('#dAsana').value.trim(); cfg.whatsapp = NX.digitos($('#dWa').value);
   cfg.taxas = {}; $$('[data-tx]').forEach(function (i) { cfg.taxas[i.dataset.tx] = num(i.value); });
+  cfg.textos = { intro: $('#tIntro').value.trim(), obs: $('#tObs').value.trim(), pagResumo: $('#tPagR').value.trim(), pagDetalhe: $('#tPagD').value.trim(),
+    prazo: $('#tPrazo').value.trim(), execucao: $('#tExec').value.trim(), infos: $('#tInfos').value.split('\n').map(function (x) { return x.trim(); }).filter(Boolean),
+    turnos: $$('[data-tturno]').filter(function (c) { return c.checked; }).map(function (c) { return c.dataset.tturno; }),
+    exProjeto: $('#tExProj').value.trim(), exLocal: $('#tExLocal').value.trim(), exArea: $('#tExArea').value.trim(), exDesconto: $('#tExDesc').value.trim() };
   if (cfg.comissaoPct < 0 || cfg.comissaoPct > 100) return NX.toast('A comissão deve ficar entre 0% e 100%.', true);
   var b = $('#dSalvar'); b.disabled = true; $('#dMsg').textContent = 'Salvando…';
   NX.api('salvarConfig', { config: cfg }).then(function (r) {

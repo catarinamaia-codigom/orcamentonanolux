@@ -6,8 +6,7 @@ var $ = NX.$, $$ = NX.$$, esc = NX.esc, num = NX.num, f2 = NX.f2, brl = NX.brl, 
 var I = window.NX_IMG || {};
 var CONTRATO = 'https://www.sommar.eco.br/contratonanolux';
 function whats() { return NX.digitos(S.cfg.whatsapp) || '558130403895'; }
-var INTRO_PADRAO = 'NANOLUX: Resina líquida transparente de bloqueio solar para vidros | Aplicação Manual | Orçamento para bloqueio de até 99% de proteção UV e até 80% de proteção IR. Garanta 10 anos de eficiência mínima de 80%. O contrato de serviço geral deve ser consultado em www.sommar.eco.br/contratonanolux. Projetos corporativos ou com cláusulas excepcionais exigem contratos dedicados. Orçamentos com áreas enviadas pelo cliente serão atualizados com base na medição oficial no dia da instalação. Acréscimo de R$ 850,00 para aplicação noturna (até 3 dias de serviço) - Limpeza pesada pós-obra: cobrado adicional de R$ 32/m². Orçamento realizado em conformidade com a Tabela de Representação Fixa da SOMMAR.';
-var OBS_PADRAO = 'As medidas são as enviadas pelo cliente. O orçamento é passível de alteração após a medição no dia do projeto. Tolerância de 3%: Diferenças na área de até 3% (para mais ou para menos) não geram reajuste. Acima de 3%: Diferenças superiores a 3% serão ajustadas com estorno (área menor) ou cobrança de complementação (área maior).';
+function T() { var t = (S.cfg && S.cfg.textos) || {}, d = C.CONFIG_PADRAO.textos, o = {}, k; for (k in d) o[k] = t[k] != null ? t[k] : d[k]; return o; }
 
 function PRESETS() { return S.cfg.produtos || C.CONFIG_PADRAO.produtos; }
 function rnd() { var a = new Uint8Array(3); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (x) { return (x < 16 ? '0' : '') + x.toString(16); }).join('').toUpperCase(); }
@@ -24,8 +23,8 @@ function padrao() {
   return {
     cliente: '', telefone: '', projeto: '', local: '', asanaUrl: '', numero: novoNumero(e), emissao: e, validadeDias: String(S.cfg.validadePadrao || 10),
     representante: (S.user && S.user.nome) || 'Equipe SOMMAR', versao: 'V01', anteriores: 'Primeira proposta',
-    prazo: '1 dia', pagResumo: 'Cartão em até 3 vezes sem juros', pagDetalhe: 'Pagamento em até 3 parcelas no cartão, sujeito à aprovação e à taxa cadastrada.',
-    turnos: ['Manhã', 'Tarde'], execucao: 'Equipe exclusivamente SOMMAR', obs: OBS_PADRAO, intro: INTRO_PADRAO,
+    prazo: T().prazo, pagResumo: T().pagResumo, pagDetalhe: T().pagDetalhe,
+    turnos: (T().turnos || []).slice(), execucao: T().execucao, obs: T().obs, intro: T().intro,
     descNome: '', descTipo: 'valor', descValor: '',
     simulacao: [{ forma: 'PIX', pct: '100' }],
     itens: [item('protocolo', { area: '' }), item('nanolux', { area: '', qtd: '10' })]
@@ -54,11 +53,11 @@ P.abrir = function (id) {
   meta = { id: o.id, status: o.status, versaoN: o.versao || 1, grupo: o.grupo, vendedor: o.vendedor, ro: o.status === 'faturado' || !!o.substituidoPor, salvoEm: o.atualizadoEm };
   salvarLocal(); NX.ir('proposta');
 };
-P.atualizar = function (id) {
+P.atualizar = function (id, semConfirmar) {
   var o = reg(id); if (!o) return NX.toast('Orçamento não encontrado', true);
   var g = NX.grupos().filter(function (x) { return x.id === o.grupo; })[0];
   if (g.faturado) return NX.toast('Este orçamento já foi faturado.', true);
-  if (state && meta && meta.sujo && !confirm('Há alterações não salvas no orçamento aberto. Continuar mesmo assim?')) return;
+  if (!semConfirmar && state && meta && meta.sujo && !confirm('Há alterações não salvas no orçamento aberto. Continuar mesmo assim?')) return;
   var atual = g.atual, n = Math.max.apply(null, g.versoes.map(function (x) { return x.versao || 1; })) + 1;
   state = completar(atual.dados);
   state.emissao = NX.hoje(); state.versao = 'V' + pad(n);
@@ -160,11 +159,13 @@ function kcard(x, color, lab, val, big){
 }
 function page2(c, i, n){
   var wa = 'https://wa.me/' + whats() + '?text=' + encodeURIComponent('Meu orçamento é o nº ' + state.numero + ', quero negociar.');
-  var infos = ['Validade desta proposta: ' + c.vd + ' dias a partir da data de emissão.', 'A medição final será conferida antes da execução.', 'Garantia de 10 anos conforme as condições do contrato Nanolux.'];
+  var infos = ['Validade desta proposta: ' + c.vd + ' dias a partir da data de emissão.'].concat((T().infos || []).filter(function (x) { return String(x).trim(); }));
   if (c.turnos) infos.push('Turnos autorizados para execução: ' + c.turnos + '.');
   if ((state.execucao || '').trim()) infos.push('Modalidade de execução prevista: ' + state.execucao.trim().replace(/\.$/, '') + '.');
-  var li = infos.slice(0, 5).map(function(t, k){
-    var y = 522.9 + k * 45.4;
+  infos = infos.slice(0, 7);
+  var passo = infos.length > 5 ? Math.max(30, 227 / (infos.length - 1)) : 45.4;
+  var li = infos.map(function(t, k){
+    var y = 522.9 + k * passo;
     return '<div class="a dot" style="left:118.8px;top:' + y + 'px"><img src="' + I.check + '"></div><div class="a itx" style="top:' + (y + 1.8).toFixed(1) + 'px">' + esc(t) + '</div>';
   }).join('');
   return '<div class="pg" data-kind="p2">' + header() +
@@ -248,23 +249,26 @@ NX.paginas.proposta = function (view) {
       '<div class="actions"><button class="btn ghost" id="pNovo" type="button">Novo orçamento</button>' +
       '<button class="btn ghost" id="pSalvar" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg> Salvar</button>' +
       '<button class="btn primary" id="pPdf" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 19h16"/></svg> Baixar PDF</button></div></div>' +
-    '<div class="status-bar" id="pStatus"></div>' +
+    '<div class="status-bar" id="pStatus"></div><div id="pAnt"></div>' +
     '<details class="card calc" id="calc" open><summary><span class="n" style="display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--grad);color:#fff;font-size:12px">R$</span> Calculadora de m² e comissão <span class="hint" style="font-size:12.5px">simule as formas de pagamento — fica salva com o orçamento</span></summary>' +
       '<div class="calc-grid">' +
         '<div class="cbox"><h3>Formas de pagamento (simulação)</h3><div id="simRows"></div>' +
           '<div class="inline" style="justify-content:space-between;margin-top:6px"><button class="btn add tiny" id="simAdd" type="button">+ forma de pagamento</button><span class="sumline" id="simSum"></span></div>' +
           '<button class="linkbtn" id="simPag" type="button" style="margin-top:10px">usar esta simulação na “Condição de pagamento” do PDF</button></div>' +
-        '<div class="cbox"><h3>m² efetivo</h3><div class="m2big"><div class="v" id="m2v">—</div><div class="r" id="m2r"></div></div><div id="verdict"></div>' +
-          '<div class="slider-box" id="slBox"><div class="top"><span>Valor do m² no orçamento</span><b id="slV"></b></div><input type="range" id="sl" min="0" max="1000" step="1"><div class="range-scale"><span id="slMin"></span><span id="slMax"></span></div>' +
-          '<div class="minline"><span id="minTxt" class="muted"></span><button class="btn tiny ghost" id="minApl" type="button">Aplicar mínimo</button></div></div></div>' +
+        '<div class="cbox"><h3>m² efetivo</h3><div class="sim-bar" id="simBar" hidden><span>Simulando nas barras — ainda não está no orçamento</span><span class="inline" style="gap:6px"><button class="btn tiny primary" id="simTudo" type="button">Aplicar tudo</button><button class="linkbtn" id="simReset" type="button">descartar</button></span></div>' +
+          '<div class="m2big"><div class="v" id="m2v">—</div><div class="r" id="m2r"></div></div><div id="verdict"></div>' +
+          '<div class="slider-box" id="slBox"><div class="top"><span>Valor do m² no orçamento</span><b id="slV"></b></div><input type="range" id="sl" min="0" max="1000" step="1" aria-label="Valor do m²"><div class="range-scale"><span id="slMin"></span><span id="slMax"></span></div>' +
+          '<div class="minline"><span id="minTxt" class="muted"></span><span class="inline" style="gap:6px"><button class="btn tiny dark" id="slApl" type="button" hidden>Aplicar</button><button class="btn tiny ghost" id="minApl" type="button">Aplicar mínimo</button></span></div></div>' +
+          '<div class="slider-box" id="sdBox"><div class="top"><span id="sdLbl">Desconto</span><b id="sdV"></b></div><input type="range" id="sd" min="0" max="100" step="1" aria-label="Desconto"><div class="range-scale"><span id="sdMin"></span><span id="sdMax"></span></div>' +
+          '<div class="minline"><span id="maxTxt" class="muted"></span><span class="inline" style="gap:6px"><button class="btn tiny dark" id="sdApl" type="button" hidden>Aplicar</button><button class="btn tiny ghost" id="maxApl" type="button">Aplicar máximo</button></span></div></div></div>' +
         '<div class="cbox"><h3>Resumo financeiro</h3><div id="fin"></div></div>' +
       '</div></details>' +
     '<div class="app-grid"><section class="form" id="form">' +
       '<div class="card"><h2><span class="n">1</span>Dados do orçamento</h2><div class="grid">' +
         '<label class="f">Cliente<input type="text" data-f="cliente" placeholder="Nome do cliente"></label>' +
         '<label class="f">Telefone do cliente<input type="tel" data-f="telefone" placeholder="(81) 90000-0000"></label>' +
-        '<label class="f">Projeto<input type="text" data-f="projeto" placeholder="Ex.: Fachada stand"></label>' +
-        '<label class="f">Local<input type="text" data-f="local" placeholder="Cidade/UF"></label>' +
+        '<label class="f">Projeto<input type="text" data-f="projeto" placeholder="' + esc(T().exProjeto) + '"></label>' +
+        '<label class="f">Local<input type="text" data-f="local" placeholder="' + esc(T().exLocal) + '"></label>' +
         '<label class="f full">Link do cliente no Asana <span class="hint">(fica salvo no histórico)</span><input type="url" data-f="asanaUrl" placeholder="https://app.asana.com/…"></label>' +
         '<label class="f full">Nº do orçamento<div class="inline"><input type="text" data-f="numero"><button class="btn ghost small" id="btnNum" type="button" title="Gerar outro número aleatório">🎲 Gerar novo</button></div></label>' +
         '<label class="f">Emissão<input type="date" data-f="emissao"></label>' +
@@ -276,7 +280,7 @@ NX.paginas.proposta = function (view) {
         '<label class="f">Prazo estimado<input type="text" data-f="prazo" placeholder="Ex.: 1 dia"></label>' +
         '<label class="f">Área total <span class="hint">(automática)</span><input type="text" id="areaCalc" readonly></label></div>' +
         '<div class="disc"><div class="ttl">Desconto <span class="hint" style="font-weight:400">opcional — deixe o valor vazio para não aplicar</span></div><div class="grid">' +
-          '<label class="f full">Nome do desconto<input type="text" data-f="descNome" placeholder="Ex.: Desconto à vista"></label>' +
+          '<label class="f full">Nome do desconto<input type="text" data-f="descNome" placeholder="' + esc(T().exDesconto) + '"></label>' +
           '<div class="f">Tipo<div class="seg" id="descTipo"><button type="button" data-v="valor">R$</button><button type="button" data-v="pct">%</button></div></div>' +
           '<label class="f">Valor do desconto<input type="text" inputmode="decimal" data-f="descValor" placeholder="0,00"></label></div></div>' +
         '<div class="totals" id="totals"></div></div>' +
@@ -302,6 +306,58 @@ NX.paginas.proposta = function (view) {
 if (window.ResizeObserver) new ResizeObserver(function () { aplicarEscala(); }).observe(document.documentElement);
 window.addEventListener('resize', aplicarEscala);
 
+/* ---------- cliente repetido e orçamentos anteriores ---------- */
+function fonePar(a, b) { var x = NX.digitos(a), y = NX.digitos(b); if (x.length < 8 || y.length < 8) return false; var n = Math.min(9, x.length, y.length); return x.slice(-n) === y.slice(-n); }
+function gruposDoCliente() {
+  var n = NX.norm((state.cliente || '').trim()), t = state.telefone || '';
+  if (!n && NX.digitos(t).length < 8) return [];
+  return NX.grupos().filter(function (g) {
+    if (meta && meta.grupo && g.id === meta.grupo) return false;
+    return g.versoes.some(function (o) { return (n && NX.norm((o.cliente || '').trim()) === n) || fonePar(o.telefone, t); });
+  }).sort(function (a, b) { return (b.ultimo || '').localeCompare(a.ultimo || ''); });
+}
+function linhaAnt(o) {
+  return '<div class="ant-row"><span class="nowrap"><b>' + esc(o.numero || '') + '</b><span class="vtag">V' + pad(o.versao || 1) + '</span></span><span class="muted nowrap">' + NX.dataBR(o.emissao) + '</span>' +
+    '<span class="nowrap"><b>' + brl(o.valorFinal) + '</b>' + (o.area > 0 ? ' <small class="muted">· ' + f2(o.area) + ' m² · ' + brl(o.valorM2) + '/m²</small>' : '') + '</span>' +
+    '<span class="ant-tags">' + NX.statusTag(o) + (o.status === 'faturado' ? '' : NX.situacaoTag(o)) + '</span>' +
+    (o.id === (meta && meta.id) ? '<span class="muted" style="font-size:12px">aberto agora</span>' : '<button class="btn tiny ghost" type="button" data-antabrir="' + o.id + '">Abrir</button>') + '</div>';
+}
+function renderAnteriores() {
+  var el = $('#pAnt'); if (!el) return;
+  var mesmo = meta && meta.grupo ? (NX.grupos().filter(function (g) { return g.id === meta.grupo; })[0] || { versoes: [] }).versoes.filter(function (o) { return o.id !== meta.id; }) : [];
+  var outros = gruposDoCliente(), nOut = outros.reduce(function (s, g) { return s + g.versoes.length; }, 0);
+  if (!mesmo.length && !outros.length) { el.innerHTML = ''; return; }
+  var tot = outros.concat(mesmo.length ? [{ versoes: mesmo }] : []).reduce(function (s, g) { return s + g.versoes.length; }, 0);
+  var fat = outros.filter(function (g) { return g.faturado; }).length;
+  el.innerHTML = '<details class="card ant" ' + (el.dataset.fechado ? '' : 'open') + '><summary>Orçamentos anteriores de ' + esc(state.cliente || 'este cliente') + ' <span class="hint" style="font-size:12.5px;margin-left:8px">' + tot + ' registro' + (tot === 1 ? '' : 's') + (fat ? ' · ' + fat + ' faturado' + (fat === 1 ? '' : 's') : '') + '</span></summary>' +
+    (mesmo.length ? '<div class="ant-sec">Versões anteriores deste orçamento</div>' + mesmo.map(linhaAnt).join('') : '') +
+    (outros.length ? '<div class="ant-sec">Outros orçamentos do mesmo cliente (nome ou telefone)</div>' + outros.map(function (g) { return g.versoes.slice(0, 4).map(linhaAnt).join(''); }).join('') : '') + '</details>';
+  var d = $('details', el); d.addEventListener('toggle', function () { el.dataset.fechado = d.open ? '' : '1'; });
+  $$('[data-antabrir]', el).forEach(function (b) { b.onclick = function () { P.abrir(b.dataset.antabrir); }; });
+}
+function perguntarCliente(gs, seguir, cancelar) {
+  var decidiu = false;
+  NX.modal('<div class="modal-h"><div><h2>Esse cliente já tem orçamento</h2><p>Encontrei ' + (gs.length === 1 ? 'um orçamento' : gs.length + ' orçamentos') + ' com o mesmo nome ou telefone. É um projeto novo ou a atualização de um orçamento antigo?</p></div><button class="btn ghost small" data-fechar>Fechar</button></div>' +
+    '<div class="modal-b"><div class="dup-list">' + gs.slice(0, 6).map(function (g) {
+      var o = g.atual, n = Math.max.apply(null, g.versoes.map(function (x) { return x.versao || 1; })) + 1;
+      return '<div class="dup-item"><div class="t"><b>' + esc(o.cliente || 'Sem nome') + '</b><span>' + esc(o.telefone || 'sem telefone') + (o.local ? ' · ' + esc(o.local) : '') + '</span>' +
+        '<span>' + esc(o.numero) + ' V' + pad(o.versao || 1) + ' · ' + NX.dataBR(o.emissao) + ' · <b>' + brl(o.valorFinal) + '</b></span><span class="ant-tags">' + NX.statusTag(o) + (o.status === 'faturado' ? '' : NX.situacaoTag(o)) + '</span></div>' +
+        (g.faturado ? '<span class="muted" style="font-size:12px;max-width:150px;text-align:right">Já faturado: crie como projeto novo</span>' : '<button class="btn dark small" type="button" data-dupatual="' + o.id + '">Atualizar este (V' + pad(n) + ')</button>') + '</div>';
+    }).join('') + '</div><p class="muted" style="font-size:12.5px;margin:12px 0 0">Atualizar carrega o orçamento antigo como nova versão, com o mesmo número; a versão anterior fica inválida.</p></div>' +
+    '<div class="modal-f"><button class="btn ghost" data-fechar>Decidir depois</button><button class="btn primary" id="dupNovo" type="button">É um projeto novo</button></div>',
+    function (m, fechar) {
+      m.style.maxWidth = '720px';
+      $('#dupNovo', m).onclick = function () { decidiu = true; meta.novoProjeto = true; salvarLocal(); fechar(); if (seguir) seguir(); };
+      $$('[data-dupatual]', m).forEach(function (b) { b.onclick = function () { decidiu = true; fechar(); P.atualizar(b.dataset.dupatual, true); }; });
+      var obs = new MutationObserver(function () { if (!document.body.contains(m)) { obs.disconnect(); if (!decidiu && cancelar) cancelar(); } });
+      obs.observe(document.body, { childList: true });
+    });
+}
+function checarCliente() {
+  if (!meta || meta.id || meta.atualizaDe || meta.novoProjeto || meta.ro) return;
+  var gs = gruposDoCliente(); if (gs.length) perguntarCliente(gs);
+}
+
 function barra() {
   var el = $('#pStatus'); if (!el) return;
   var o = meta.id ? reg(meta.id) : null, h = '', ro = !!meta.ro;
@@ -317,6 +373,7 @@ function barra() {
   if (o && !meta.atualizaDe && o.status !== 'faturado') h += '<button class="btn tiny ghost" id="sbAtual" type="button">Atualizar (nova versão)</button>';
   if (o && !ro && o.status !== 'faturado') h += '<button class="btn tiny ghost" id="sbFat" type="button">Faturar</button>';
   el.innerHTML = h; el.classList.toggle('ro', ro);
+  renderAnteriores();
   var a = $('#sbAtual'); if (a) a.onclick = function () { P.atualizar(o.id); };
   var f = $('#sbFat'); if (f) f.onclick = function () { if (meta.sujo) return NX.toast('Salve as alterações antes de faturar.', true); NX.faturar(o.id); };
   var form = $('#form'); if (form) form.classList.toggle('ro', ro);
@@ -342,7 +399,7 @@ function renderItens() {
       '<button class="ibtn" type="button" data-act="up" title="Subir"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="ibtn" type="button" data-act="down" title="Descer"' + (i === n - 1 ? ' disabled' : '') + '>↓</button>' +
       '<button class="ibtn" type="button" data-act="dup" title="Duplicar">⧉</button><button class="ibtn del" type="button" data-act="del" title="Remover">✕</button></div>' +
       '<div class="stack"><div class="grid"><label class="f">Produto / serviço<input type="text" data-k="nome" value="' + esc(it.nome) + '"></label>' +
-      '<label class="f">Área / referência<input type="text" data-k="area" value="' + esc(it.area) + '" placeholder="Ex.: Fachada"></label></div>' +
+      '<label class="f">Área / referência<input type="text" data-k="area" value="' + esc(it.area) + '" placeholder="' + esc(T().exArea) + '"></label></div>' +
       '<label class="f"><span class="lab-row">Descrição <button class="linkbtn" type="button" data-act="rdesc">usar texto automático</button></span><textarea data-k="desc" rows="3">' + esc(it.desc) + '</textarea></label>' +
       '<div class="grid3"><label class="f">Quantidade<input type="text" inputmode="decimal" data-k="qtd" value="' + esc(it.qtd) + '"></label>' +
       '<label class="f">Unidade<input type="text" list="unidades" data-k="unidade" value="' + esc(it.unidade) + '"></label>' +
@@ -361,25 +418,39 @@ function renderSim() {
 }
 
 /* ---------- calculadora ---------- */
-function comPreco(p) {
-  var d = JSON.parse(JSON.stringify(state));
-  d.itens.forEach(function (it) { if (it.contaArea) it.valor = p; });
+/* sim = valores simulados nas barras (ainda não aplicados ao orçamento) */
+var sim = { preco: null, desc: null };
+function comSim(over) {
+  over = over || {};
+  var d = JSON.parse(JSON.stringify(state)), preco = over.preco !== undefined ? over.preco : sim.preco, desc = over.desc !== undefined ? over.desc : sim.desc;
+  if (preco != null) d.itens.forEach(function (it) { if (it.contaArea) it.valor = preco; });
+  if (desc != null) d.descValor = desc;
   return C.analise(d, S.cfg);
 }
 function precoMinimo(ref) {
   var lo = 0, hi = 1e6;
-  if (comPreco(hi).m2ef < ref) return null;
-  for (var i = 0; i < 60; i++) { var mid = (lo + hi) / 2; if (comPreco(mid).m2ef >= ref) hi = mid; else lo = mid; }
+  if (comSim({ preco: hi }).m2ef < ref) return null;
+  for (var i = 0; i < 60; i++) { var mid = (lo + hi) / 2; if (comSim({ preco: mid }).m2ef >= ref) hi = mid; else lo = mid; }
   return Math.ceil(hi * 100) / 100;
 }
+function descontoMaximo(ref) {
+  var pct = state.descTipo === 'pct', hi = pct ? 100 : comSim({ desc: 0 }).total;
+  if (comSim({ desc: 0 }).m2ef < ref) return null;
+  if (comSim({ desc: hi }).m2ef >= ref) return hi;
+  var lo = 0;
+  for (var i = 0; i < 60; i++) { var mid = (lo + hi) / 2; if (comSim({ desc: mid }).m2ef >= ref) lo = mid; else hi = mid; }
+  return pct ? Math.floor(lo * 10) / 10 : Math.floor(lo * 100) / 100;
+}
+function fmtDesc(v) { return state.descTipo === 'pct' ? String(Math.round(v * 10) / 10).replace('.', ',') + '%' : brl(v); }
 function calculadora() {
   if (!$('#fin')) return;
-  var a = C.analise(state, S.cfg), temArea = a.area > 0;
+  var a = comSim(), temArea = a.area > 0, simulando = sim.preco != null || sim.desc != null;
   a.pagamentos.forEach(function (p, i) { var el = $('[data-sv="' + i + '"]'); if (el) el.innerHTML = brl(p.valor) + (p.taxaPct ? '<br><small>taxa ' + f2(p.taxaPct) + '%</small>' : ''); });
   var soma = state.simulacao.reduce(function (s, p) { return s + num(p.pct); }, 0), sOk = Math.abs(soma - 100) < 0.01;
   var ss = $('#simSum'); ss.textContent = 'Total: ' + String(Math.round(soma * 100) / 100).replace('.', ',') + '%' + (sOk ? '' : ' (precisa somar 100%)'); ss.classList.toggle('bad', !sOk);
-  $('#fin').innerHTML =
+  $('#fin').innerHTML = (simulando ? '<div class="sim-tag">Valores com a simulação das barras</div>' : '') +
     '<div class="kv"><span>Valor final ao cliente</span><b>' + brl(a.final) + '</b></div>' +
+    (a.desc > 0 ? '<div class="kv"><span>Desconto</span><b>− ' + brl(a.desc) + '</b></div>' : '') +
     '<div class="kv"><span>Taxas da máquina</span><b>− ' + brl(a.taxas) + '</b></div>' +
     '<div class="kv"><span>Valor líquido SOMMAR</span><b>' + brl(a.liquido) + '</b></div>' +
     '<div class="kv"><span>Custos fixos <small class="muted">(itens fora da área + fixo)</small></span><b>− ' + brl(a.fixos) + '</b></div>' +
@@ -391,17 +462,33 @@ function calculadora() {
   else if (!a.ref) v.innerHTML = '<div class="verdict ok">' + NX.IC.ok + '<span>Sem valor de referência cadastrado para este produto na Diretoria.</span></div>';
   else if (a.precisaAutorizacao) v.innerHTML = '<div class="verdict no">' + NX.IC.alerta + '<span>m² efetivo abaixo da referência: <b>este valor precisa de autorização da Diretoria</b> para ser ofertado ao cliente.</span></div>';
   else v.innerHTML = '<div class="verdict ok">' + NX.IC.ok + '<span>Dentro da referência — pode ofertar sem autorização.</span></div>';
-  var areaItens = state.itens.filter(function (it) { return it.contaArea; }), sl = $('#sl'), box = $('#slBox');
-  box.hidden = !areaItens.length;
-  if (areaItens.length) {
-    var p = num(areaItens[0].valor), min = a.ref ? precoMinimo(a.ref) : null;
+  $('#simBar').hidden = !simulando;
+  var areaItens = state.itens.filter(function (it) { return it.contaArea; });
+  $('#slBox').hidden = $('#sdBox').hidden = !areaItens.length;
+  if (!areaItens.length) return;
+  /* barra do m² */
+  var aplicado = num(areaItens[0].valor), p = sim.preco != null ? sim.preco : aplicado, min = a.ref ? precoMinimo(a.ref) : null, sl = $('#sl');
+  if (sim.preco == null) {
     var lo = Math.max(0, Math.floor(Math.min(p, a.ref || p, min || p) * 0.6 / 5) * 5), hi = Math.ceil(Math.max(p * 1.4, (a.ref || 0) * 1.6, (min || 0) * 1.3, 100) / 5) * 5;
-    if (document.activeElement !== sl) { sl.min = lo; sl.max = hi; sl.value = p; $('#slMin').textContent = brl(lo); $('#slMax').textContent = brl(hi); }
-    $('#slV').textContent = brl(p) + '/m²';
-    var mt = $('#minTxt'), mb = $('#minApl');
-    if (min != null) { mt.innerHTML = 'Mínimo sem autorização: <b>' + brl(min) + '/m²</b>'; mb.hidden = Math.abs(p - min) < 0.005; mb.dataset.v = min; }
-    else { mt.textContent = a.ref ? 'Ajuste o desconto ou a forma de pagamento.' : ''; mb.hidden = true; }
+    sl.min = lo; sl.max = hi; sl.value = p; $('#slMin').textContent = brl(lo); $('#slMax').textContent = brl(hi);
   }
+  $('#slV').innerHTML = brl(p) + '/m²' + (sim.preco != null && Math.abs(p - aplicado) > 0.004 ? ' <small class="muted" style="font-weight:500">(no orçamento: ' + brl(aplicado) + ')</small>' : '');
+  var sa = $('#slApl'); sa.hidden = sim.preco == null || Math.abs(p - aplicado) < 0.005; sa.textContent = 'Aplicar ' + brl(p) + '/m²';
+  var mt = $('#minTxt'), mb = $('#minApl');
+  if (min != null) { mt.innerHTML = 'Mínimo sem autorização: <b>' + brl(min) + '/m²</b>'; mb.hidden = Math.abs(aplicado - min) < 0.005 && sim.preco == null; mb.dataset.v = min; }
+  else { mt.textContent = a.ref ? 'Nem com m² alto sai da autorização: revise o desconto ou a forma de pagamento.' : ''; mb.hidden = true; }
+  /* barra do desconto */
+  var pct = state.descTipo === 'pct', dAplic = num(state.descValor), dv = sim.desc != null ? sim.desc : dAplic, dmax = a.ref ? descontoMaximo(a.ref) : null, sd = $('#sd');
+  if (sim.desc == null) {
+    var totalSemDesc = comSim({ desc: 0 }).total, dhi = pct ? Math.min(100, Math.max(30, dv * 1.5, (dmax || 0) * 1.4)) : Math.ceil(Math.max(totalSemDesc * 0.3, dv * 1.5, (dmax || 0) * 1.4, 100) / 10) * 10;
+    sd.min = 0; sd.max = Math.round(dhi * 10) / 10; sd.step = pct ? 0.5 : 1; sd.value = dv; $('#sdMin').textContent = pct ? '0%' : brl(0); $('#sdMax').textContent = fmtDesc(+sd.max);
+  }
+  $('#sdLbl').textContent = 'Desconto' + ((state.descNome || '').trim() ? ' · ' + state.descNome.trim() : '') + (pct ? ' (%)' : ' (R$)');
+  $('#sdV').innerHTML = fmtDesc(dv) + (pct && dv > 0 ? ' <small class="muted" style="font-weight:500">= ' + brl(a.desc) + '</small>' : '') + (sim.desc != null && Math.abs(dv - dAplic) > 0.004 ? ' <small class="muted" style="font-weight:500">(no orçamento: ' + fmtDesc(dAplic) + ')</small>' : '');
+  var da = $('#sdApl'); da.hidden = sim.desc == null || Math.abs(dv - dAplic) < 0.005; da.textContent = dv > 0 ? 'Aplicar desconto de ' + fmtDesc(dv) : 'Remover desconto';
+  var xt = $('#maxTxt'), xb = $('#maxApl');
+  if (dmax != null) { xt.innerHTML = 'Desconto máximo sem autorização: <b>' + fmtDesc(dmax) + '</b>'; xb.hidden = Math.abs(dAplic - dmax) < 0.005 && sim.desc == null; xb.dataset.v = dmax; }
+  else { xt.textContent = a.ref ? 'Mesmo sem desconto, precisa de autorização: suba o m².' : ''; xb.hidden = true; }
 }
 function definirPrecoArea(v) {
   state.itens.forEach(function (it, i) {
@@ -409,6 +496,10 @@ function definirPrecoArea(v) {
     it.valor = f2(v);
     var inp = $('.item[data-i="' + i + '"] [data-k="valor"]'); if (inp) inp.value = it.valor;
   });
+}
+function definirDesconto(v) {
+  state.descValor = v > 0 ? (state.descTipo === 'pct' ? String(Math.round(v * 10) / 10).replace('.', ',') : f2(v)) : '';
+  var inp = $('[data-f="descValor"]'); if (inp) inp.value = state.descValor;
 }
 
 /* ---------- eventos ---------- */
@@ -418,6 +509,7 @@ function ligar(view) {
   $('#pSalvar').onclick = function () { salvar(false).catch(function () {}); };
   $('#pPdf').onclick = baixarPDF;
   form.addEventListener('input', function (e) {
+    sim = { preco: null, desc: null };
     var t = e.target, f = t.dataset.f, k = t.dataset.k;
     if (f) { state[f] = t.value; agendar(); return; }
     if (t.dataset.turno) { state.turnos = $$('[data-turno]', form).filter(function (x) { return x.checked; }).map(function (x) { return x.dataset.turno; }); agendar(); return; }
@@ -432,6 +524,7 @@ function ligar(view) {
   form.addEventListener('change', function (e) {
     var t = e.target;
     if (t.dataset.k === 'qtd' || t.dataset.k === 'valor') { var it = state.itens[+t.closest('.item').dataset.i]; if (String(t.value).trim()) { it[t.dataset.k] = t.value = f2(num(t.value)); agendar(); } }
+    if (t.dataset.f === 'cliente' || t.dataset.f === 'telefone') { renderAnteriores(); checarCliente(); }
     if (t.dataset.f === 'descValor' && String(t.value).trim()) { state.descValor = t.value = state.descTipo === 'pct' ? String(num(t.value)).replace('.', ',') : f2(num(t.value)); agendar(); }
   });
   form.addEventListener('click', function (e) {
@@ -441,8 +534,8 @@ function ligar(view) {
       var last = $('#itens .item:last-child'); if (last) { last.scrollIntoView({ behavior: 'smooth', block: 'center' }); var inp = last.querySelector(b.dataset.add === 'nanolux' ? '[data-k="qtd"]' : '[data-k="nome"]'); if (inp) setTimeout(function () { inp.focus(); if (inp.select) inp.select(); }, 250); }
       return;
     }
-    if (b.dataset.reset) { state[b.dataset.reset] = b.dataset.reset === 'obs' ? OBS_PADRAO : INTRO_PADRAO; $('[data-f="' + b.dataset.reset + '"]').value = state[b.dataset.reset]; agendar(); return; }
-    if (b.parentNode.id === 'descTipo') { state.descTipo = b.dataset.v; $$('#descTipo button').forEach(function (x) { x.classList.toggle('on', x === b); }); agendar(); return; }
+    if (b.dataset.reset) { state[b.dataset.reset] = T()[b.dataset.reset]; $('[data-f="' + b.dataset.reset + '"]').value = state[b.dataset.reset]; agendar(); return; }
+    if (b.parentNode.id === 'descTipo') { sim.desc = null; state.descTipo = b.dataset.v; $$('#descTipo button').forEach(function (x) { x.classList.toggle('on', x === b); }); agendar(); return; }
     if (b.id === 'btnNum') { state.numero = novoNumero(state.emissao); $('[data-f="numero"]').value = state.numero; agendar(); NX.toast('Novo número: ' + state.numero); return; }
     var act = b.dataset.act; if (!act) return;
     var i = +b.closest('.item').dataset.i, arr = state.itens;
@@ -456,18 +549,23 @@ function ligar(view) {
   var calcEl = $('#calc', view);
   calcEl.addEventListener('input', function (e) {
     var t = e.target;
-    if (t.id === 'sl') { definirPrecoArea(+t.value); agendar(); return; }
+    if (t.id === 'sl') { sim.preco = +t.value; calculadora(); return; }
+    if (t.id === 'sd') { sim.desc = +t.value; calculadora(); return; }
     var row = t.closest('[data-s]'); if (!row) return;
     var p = state.simulacao[+row.dataset.s]; p[t.dataset.sk] = t.value; agendar();
   });
-  calcEl.addEventListener('change', function (e) { if (e.target.id === 'sl') calculadora(); });
   calcEl.addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
     if (b.id === 'simAdd') {
       var soma = state.simulacao.reduce(function (s, p) { return s + num(p.pct); }, 0);
       state.simulacao.push({ forma: 'Cartão 3x', pct: String(Math.max(0, Math.round((100 - soma) * 100) / 100)).replace('.', ',') }); renderSim(); agendar();
     } else if (b.dataset.sdel != null) { state.simulacao.splice(+b.dataset.sdel, 1); renderSim(); agendar(); }
-    else if (b.id === 'minApl') { definirPrecoArea(+b.dataset.v); agendar(); }
+    else if (b.id === 'minApl') { definirPrecoArea(+b.dataset.v); sim.preco = null; agendar(); NX.toast('m² mínimo aplicado ao orçamento'); }
+    else if (b.id === 'slApl') { definirPrecoArea(sim.preco); sim.preco = null; agendar(); NX.toast('Valor do m² aplicado ao orçamento'); }
+    else if (b.id === 'maxApl') { definirDesconto(+b.dataset.v); sim.desc = null; agendar(); NX.toast('Desconto máximo aplicado ao orçamento'); }
+    else if (b.id === 'sdApl') { definirDesconto(sim.desc); sim.desc = null; agendar(); NX.toast('Desconto aplicado ao orçamento'); }
+    else if (b.id === 'simTudo') { if (sim.preco != null) definirPrecoArea(sim.preco); if (sim.desc != null) definirDesconto(sim.desc); sim = { preco: null, desc: null }; agendar(); NX.toast('Simulação aplicada ao orçamento'); }
+    else if (b.id === 'simReset') { sim = { preco: null, desc: null }; calculadora(); }
     else if (b.id === 'simPag') {
       var a = C.analise(state, S.cfg);
       state.pagResumo = a.pagamentos.map(function (p) { return (state.simulacao.length > 1 ? String(p.pct).replace('.', ',') + '% ' : '') + p.forma; }).join(' + ');
@@ -480,6 +578,13 @@ function ligar(view) {
 
 /* ---------- salvar ---------- */
 function salvar(pdf) {
+  if (!meta.id && !meta.atualizaDe && !meta.novoProjeto && !meta.ro) {
+    var gs = gruposDoCliente();
+    if (gs.length) return new Promise(function (res, rej) { perguntarCliente(gs, function () { salvarDeFato(pdf).then(res, rej); }, function () { NX.toast('Salvamento cancelado: escolha se é projeto novo ou atualização.', true); rej(new Error('cancelado')); }); });
+  }
+  return salvarDeFato(pdf);
+}
+function salvarDeFato(pdf) {
   if (meta.ro) { NX.toast('Este orçamento é só leitura. Use "Atualizar" para criar uma nova versão.', true); return Promise.reject(new Error('ro')); }
   var btn = $('#pSalvar'); if (btn) btn.disabled = true;
   clearTimeout(tmr);

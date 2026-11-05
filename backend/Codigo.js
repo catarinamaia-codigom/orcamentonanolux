@@ -25,6 +25,20 @@ var NX_CALC = (function () {
     custoFixo: 0,
     descontarForaArea: true,
     validadePadrao: 10,
+    textos: {
+      intro: 'NANOLUX: Resina líquida transparente de bloqueio solar para vidros | Aplicação Manual | Orçamento para bloqueio de até 99% de proteção UV e até 80% de proteção IR. Garanta 10 anos de eficiência mínima de 80%. O contrato de serviço geral deve ser consultado em www.sommar.eco.br/contratonanolux. Projetos corporativos ou com cláusulas excepcionais exigem contratos dedicados. Orçamentos com áreas enviadas pelo cliente serão atualizados com base na medição oficial no dia da instalação. Acréscimo de R$ 850,00 para aplicação noturna (até 3 dias de serviço) - Limpeza pesada pós-obra: cobrado adicional de R$ 32/m². Orçamento realizado em conformidade com a Tabela de Representação Fixa da SOMMAR.',
+      obs: 'As medidas são as enviadas pelo cliente. O orçamento é passível de alteração após a medição no dia do projeto. Tolerância de 3%: Diferenças na área de até 3% (para mais ou para menos) não geram reajuste. Acima de 3%: Diferenças superiores a 3% serão ajustadas com estorno (área menor) ou cobrança de complementação (área maior).',
+      pagResumo: 'Cartão em até 3 vezes sem juros',
+      pagDetalhe: 'Pagamento em até 3 parcelas no cartão, sujeito à aprovação e à taxa cadastrada.',
+      prazo: '1 dia',
+      execucao: 'Equipe exclusivamente SOMMAR',
+      turnos: ['Manhã', 'Tarde'],
+      infos: ['A medição final será conferida antes da execução.', 'Garantia de 10 anos conforme as condições do contrato Nanolux.'],
+      exProjeto: 'Ex.: Fachada stand',
+      exLocal: 'Cidade/UF',
+      exArea: 'Ex.: Fachada',
+      exDesconto: 'Ex.: Desconto à vista'
+    },
     asanaUrl: 'https://app.asana.com/',
     whatsapp: '558130403895',
     produtos: {
@@ -47,8 +61,9 @@ var NX_CALC = (function () {
   function mesclar(cfg) {
     var c = JSON.parse(JSON.stringify(CONFIG_PADRAO)), k;
     cfg = cfg || {};
-    for (k in cfg) if (k !== 'taxas' && k !== 'produtos') c[k] = cfg[k];
+    for (k in cfg) if (k !== 'taxas' && k !== 'produtos' && k !== 'textos') c[k] = cfg[k];
     for (k in (cfg.taxas || {})) c.taxas[k] = cfg.taxas[k];
+    for (k in (cfg.textos || {})) if (cfg.textos[k] != null) c.textos[k] = cfg.textos[k];
     if (cfg.produtos) c.produtos = cfg.produtos;
     return c;
   }
@@ -162,6 +177,8 @@ function nxRotear(req) {
   if (a === 'carregar') return nxCarregar(u);
   if (a === 'salvarOrcamento') return nxComTrava(function () { return nxSalvarOrcamento(u, req); });
   if (a === 'faturar') return nxComTrava(function () { return nxFaturar(u, req); });
+  if (a === 'vincularAsana') return nxComTrava(function () { return nxVincularAsana(u, req); });
+  if (a === 'alterarFaturamento') return nxComTrava(function () { return nxAlterarFaturamento(u, req); });
   if (a === 'salvarConfig') { nxExigirDiretor(u); return nxComTrava(function () { return nxSalvarConfig(req.config); }); }
   if (a === 'salvarUsuario') { nxExigirDiretor(u); return nxComTrava(function () { return nxSalvarUsuario(req.usuario); }); }
   throw new Error('Ação desconhecida: ' + a);
@@ -312,9 +329,7 @@ function nxFaturar(u, req) {
   if (!o || (u.papel !== 'diretor' && o.vendedorId !== u.id)) throw new Error('Orçamento não encontrado.');
   if (o.status === 'faturado') throw new Error('Este orçamento já foi faturado.');
   if (o.substituidoPor) throw new Error('Este orçamento foi atualizado por uma versão mais nova. Fature a versão atual.');
-  var pags = (req.pagamentos || []).filter(function (p) { return p && p.forma && NX_CALC.num(p.valor) > 0; });
-  if (!pags.length) throw new Error('Informe pelo menos uma forma de pagamento.');
-  pags.forEach(function (p) { if (!/^\d{4}-\d{2}-\d{2}$/.test(p.data || '')) throw new Error('Informe a data de cada pagamento.'); });
+  var pags = nxPagamentosValidos(req.pagamentos);
   var a = NX_CALC.analise(o.dados, cfg, pags);
   if (Math.abs(a.somaPag - a.final) > 0.009) throw new Error('A soma dos pagamentos (' + a.somaPag.toFixed(2) + ') precisa ser igual ao valor final (' + a.final.toFixed(2) + ').');
   var agora = new Date().toISOString(), datas = a.pagamentos.map(function (p) { return p.data; }).sort();
@@ -350,4 +365,45 @@ function nxSalvarUsuario(dados) {
   if (!diretores.length && (u.papel !== 'diretor' || !u.ativo)) throw new Error('É preciso manter pelo menos um(a) diretor(a) ativo(a).');
   nxGravar('Usuarios', u);
   return { ok: true, usuario: nxPublico(u) };
+}
+
+function nxVincularAsana(u, req) {
+  var url = String(req.url || '').trim();
+  if (url && !/^https?:\/\/\S+$/i.test(url)) throw new Error('O link precisa começar com https://');
+  var todos = nxLer('Orcamentos'), o = todos.filter(function (x) { return x.id === req.id; })[0];
+  if (!o || (u.papel !== 'diretor' && o.vendedorId !== u.id)) throw new Error('Orçamento não encontrado.');
+  var alterados = [];
+  todos.forEach(function (x) {
+    if (x.grupo !== o.grupo) return;
+    x.asanaUrl = url; x.dados = x.dados || {}; x.dados.asanaUrl = url;
+    nxGravar('Orcamentos', x); alterados.push(x);
+  });
+  return { ok: true, orcamentos: alterados };
+}
+function nxPagamentosValidos(pagamentos) {
+  var pags = (pagamentos || []).filter(function (p) { return p && p.forma && NX_CALC.num(p.valor) > 0; });
+  if (!pags.length) throw new Error('Informe pelo menos uma forma de pagamento.');
+  pags.forEach(function (p) { if (!/^\d{4}-\d{2}-\d{2}$/.test(p.data || '')) throw new Error('Informe a data de cada pagamento.'); });
+  return pags;
+}
+function nxAlterarFaturamento(u, req) {
+  var motivo = String(req.motivo || '').trim();
+  if (motivo.length < 5) throw new Error('Escreva o motivo da alteração.');
+  var cfg = nxConfig(), fats = nxLer('Faturamentos'), f = fats.filter(function (x) { return x.id === req.id; })[0];
+  if (!f || (u.papel !== 'diretor' && f.vendedorId !== u.id)) throw new Error('Faturamento não encontrado.');
+  var o = nxLer('Orcamentos').filter(function (x) { return x.id === f.orcamentoId; })[0];
+  if (!o) throw new Error('Orçamento do faturamento não encontrado.');
+  var pags = nxPagamentosValidos(req.pagamentos), a = NX_CALC.analise(o.dados, cfg, pags);
+  if (Math.abs(a.somaPag - a.final) > 0.009) throw new Error('A soma dos pagamentos (' + a.somaPag.toFixed(2) + ') precisa ser igual ao valor final (' + a.final.toFixed(2) + ').');
+  var antes = { pagamentos: f.pagamentos, taxas: f.taxas, liquido: f.liquido, comissao: f.comissao, comissaoPct: f.comissaoPct, m2Efetivo: f.m2Efetivo, obs: f.obs };
+  var datas = a.pagamentos.map(function (p) { return p.data; }).sort();
+  f.pagamentos = a.pagamentos; f.taxas = a.taxas; f.liquido = a.liquido; f.comissaoPct = a.comissaoPct; f.comissao = a.comissao; f.m2Efetivo = a.m2ef;
+  f.agenda = NX_CALC.agenda(a.pagamentos, cfg); f.modoParcelado = cfg.modoParcelado; f.primeiroPagamento = datas[0];
+  if (req.obs != null) f.obs = String(req.obs);
+  f.historico = f.historico || [];
+  f.historico.push({ em: new Date().toISOString(), por: u.nome, porId: u.id, motivo: motivo, antes: antes,
+    depois: { pagamentos: f.pagamentos, taxas: f.taxas, liquido: f.liquido, comissao: f.comissao, comissaoPct: f.comissaoPct, m2Efetivo: f.m2Efetivo, obs: f.obs } });
+  f.alteradoEm = new Date().toISOString();
+  nxGravar('Faturamentos', f);
+  return { ok: true, faturamento: f };
 }

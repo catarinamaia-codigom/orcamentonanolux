@@ -48,7 +48,7 @@ NX.paginas.comissoes = function (view) {
   $$('.filters input, .filters select', view).forEach(function (el) { el.addEventListener('input', function () { if (el.type === 'date') { F.per = ''; $$('#cper button').forEach(function (b) { b.classList.remove('on'); }); } upd(); }); });
   $('#cper').addEventListener('click', function (e) { var b = e.target.closest('[data-per]'); if (!b) return; F.per = b.dataset.per; var p = NX.periodo(F.per); $('#cde').value = p[0]; $('#cate').value = p[1]; $$('#cper button').forEach(function (x) { x.classList.toggle('on', x === b); }); upd(); });
   $('#cRec').onclick = function () { var b = this; b.disabled = true; NX.recarregar().then(function () { b.disabled = false; corpo(); NX.toast('Dados atualizados'); }).catch(function (e) { b.disabled = false; NX.toast(e.message, true); }); };
-  view.addEventListener('click', function (e) { var b = e.target.closest('[data-verfat]'); if (b) NX.verFaturamento(b.dataset.verfat); });
+  view.addEventListener('click', function (e) { var b = e.target.closest('[data-verfat]'); if (b) NX.verFaturamento(b.dataset.verfat); var c = e.target.closest('[data-altfat]'); if (c) NX.alterarFaturamento(c.dataset.altfat); });
   corpo();
 };
 
@@ -124,7 +124,7 @@ function corpo() {
           '<td><div class="stk">' + (f.pagamentos || []).map(function (p) { return '<span class="nowrap">' + esc(p.forma) + ' · ' + brl(p.valor) + '</span>'; }).join('') + '</div></td>' +
           '<td class="right nowrap">' + brl(f.liquido) + '</td><td class="right nowrap">' + (f.area > 0 ? brl(f.m2Efetivo) : '—') + '</td>' +
           '<td class="right nowrap"><b style="color:#126e64">' + brl(f.comissao) + '</b><div class="muted" style="font-size:12px">' + f2(f.comissaoPct) + '%</div></td>' +
-          '<td><button class="btn tiny ghost" data-verfat="' + f.id + '">Ver</button></td></tr>';
+          '<td><div class="acts" style="min-width:0"><button class="btn tiny ghost" data-verfat="' + f.id + '">Ver</button><button class="btn tiny ghost" data-altfat="' + f.id + '">Alterar</button></div>' + ((f.historico || []).length ? '<div class="muted" style="font-size:11px;margin-top:4px">alterado ' + f.historico.length + 'x</div>' : '') + '</td></tr>';
       }).join('') + '</tbody></table></div>' : '<div class="empty">Nenhum projeto faturado' + (S.fats.length ? ' com esses filtros.' : ' ainda. Fature pelo Histórico de orçamentos.') + '</div>') + '</div>';
   $('#cBody').innerHTML = h;
   barras($('#cChart'), serie);
