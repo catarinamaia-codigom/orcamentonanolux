@@ -1,27 +1,63 @@
-# Gerador de orçamento Nanolux · SOMMAR
+# Nanolux · SOMMAR — orçamentos, histórico e comissões
 
-Página para preencher um orçamento Nanolux e baixar o PDF no mesmo modelo da proposta comercial da SOMMAR (2 páginas, 16:9).
+Site para montar propostas comerciais Nanolux em PDF (formato apresentação 16:9), guardar o histórico de orçamentos, faturar projetos e acompanhar comissões. Os dados ficam numa **planilha Google** através de um pequeno servidor em **Google Apps Script**.
 
-## Como usar
+## Páginas
 
-1. Abra a página (GitHub Pages) ou o arquivo `index.html` direto no navegador.
-2. Preencha **Cliente**, **Projeto**, **Local**. O **nº do orçamento** é gerado sozinho (`ORC-AAAAMMDD-XXXXXX`); clique em **🎲 Gerar novo** para trocar.
-3. Em **Itens do orçamento**, adicione quantas *Aplicações completas da resina Nanolux* quiser (ou outros itens). A descrição vem preenchida automaticamente e pode ser editada. O subtotal é calculado (quantidade × valor unitário).
-4. **Área total** soma os itens marcados com "Somar na área total". **Investimento total** soma todos os subtotais.
-5. **Desconto (opcional)**: informe o nome e o valor (em R$ ou %). No PDF, o quadro verde mostra o valor total riscado, o desconto e o valor atualizado.
-6. Clique em **Baixar PDF**.
+- **Início**: resumo (total de orçamentos, últimos 30 dias, este mês, última semana, % de conversão, tempo médio de conversão), alertas de orçamentos perto de vencer, comissão a receber no próximo mês e atalhos.
+- **Proposta comercial**: cliente, telefone (no PDF aparece "Nome | telefone"), projeto, local, link do Asana, itens, desconto e o PDF.
+  - **Calculadora de m² e comissão**: simulação das formas de pagamento, taxas da máquina, valor líquido, custos fixos, comissão e **m² efetivo** comparado à referência do produto. Se ficar abaixo, aparece o aviso de que precisa de autorização. A barra ajustável muda o valor do m² ao vivo, e o botão "Aplicar mínimo" leva direto ao menor valor sem autorização.
+  - **Salvar** guarda o orçamento como *Rascunho* (amarelo). **Baixar PDF** muda para *PDF baixado* (verde).
+- **Histórico de orçamentos**: busca por nome, telefone, cidade ou número; filtros de data, status, validade e vendedor. As versões do mesmo cliente ficam no mesmo bloco de cor.
+  - As tags de validade são *Válido* (azul), *Vencido* e *Inválido · atualizado*.
+  - A tabela mostra o desconto (nome e valor), o valor do m², o m² efetivo, o valor total, a simulação e o link do Asana.
+  - **Atualizar** cria a próxima versão (V02, V03…) e invalida a anterior.
+  - **Faturar** pede as formas de pagamento (obrigatórias, cada uma com valor e data), recalcula a comissão e gera o texto para copiar no Grupo de Pagamentos do WhatsApp.
+- **Comissões**: o vendedor vê só os dele; a Diretoria vê todos e um resumo por vendedor.
+  - Gráfico das comissões por mês de faturamento.
+  - Formas de pagamento mais usadas.
+  - Média do m² real, área média e tempo médio do orçamento ao 1º pagamento.
+  - Previsão de recebimento: a comissão é paga no mês seguinte ao recebimento, proporcional ao que foi recebido em cada mês.
+- **Painel da Diretoria**:
+  - % de comissão sobre o valor líquido.
+  - Cartão parcelado: comissão integral ou dividida pelas parcelas.
+  - Taxas da máquina (PIX, Cartão 1x a 12x, Boleto, Transferência e Dinheiro).
+  - Custo fixo por projeto e catálogo de produtos com preço padrão e **referência do m²**.
+  - Links do Asana e do WhatsApp.
+  - Cadastro de usuários (nome + PIN, papel Vendedor ou Diretoria).
 
-Os dados ficam salvos no próprio navegador até você clicar em **Novo orçamento**.
-Se houver muitos itens, o PDF cria páginas de continuação automaticamente.
+## Instalação (uma vez)
 
-## Editar textos e preços padrão
+1. Crie uma planilha Google, por exemplo **Nanolux · Orçamentos**.
+2. Na planilha, abra **Extensões → Apps Script**, apague o conteúdo e cole **todo** o arquivo [`backend/Codigo.js`](backend/Codigo.js). Salve.
+3. Vá em **Implantar → Nova implantação**, escolha o tipo **App da Web** e configure:
+   - Executar como: **Eu**
+   - Quem pode acessar: **Qualquer pessoa**
 
-No `index.html`, procure por `PRESETS` (catálogo de produtos), `INTRO_PADRAO` e `OBS_PADRAO`.
+   Autorize o acesso quando o Google pedir.
+4. Copie a URL do App da Web (termina em `/exec`) e coloque em [`config.js`](config.js), no campo `apiUrl`.
+5. Abra o site. No primeiro acesso você cria o usuário da **Diretoria**. Depois, cadastre os vendedores no Painel da Diretoria.
+
+As abas `Usuarios`, `Orcamentos`, `Faturamentos` e `Config` são criadas sozinhas na planilha. A coluna `json` guarda os dados completos: não edite à mão.
+Ao alterar `backend/Codigo.js` depois, faça **Implantar → Gerenciar implantações → editar → Nova versão** para a URL continuar a mesma.
+
+**Modo demonstração:** abra o site com `?demo=1` no fim do endereço. Ele usa o mesmo código do servidor, mas com uma planilha simulada salva só no navegador.
+
+## Segurança
+
+O login é feito por nome + PIN. O PIN é guardado com hash e sal, e a sessão usa um token assinado com validade de 30 dias. Depois de 5 tentativas erradas, o login fica bloqueado por 10 minutos. O servidor confere quem é cada usuário: vendedores só recebem os próprios orçamentos e faturamentos, e só a Diretoria altera configurações e usuários.
+
+## Ideias para depois
+
+- **Atualizar Asana**: enviar os valores do orçamento para o cliente no Asana (o botão já aparece no menu como "em breve").
+- **PDF de faturamento**: aguardando o modelo.
 
 ## Arquivos
 
-- `index.html`: interface, modelo das páginas e geração do PDF
-- `assets.js`: logos, QR Code do contrato e fonte embutidos (o PDF sai com texto real, selecionável)
-- `lib/`: [jsPDF](https://github.com/parallax/jsPDF) 4.2.1 (licença MIT)
+- `index.html`, `css/`, `js/`: o site (`proposta.js` monta o PDF; `historico.js`, `comissoes.js` e `diretoria.js` são as outras páginas)
+- `backend/Codigo.js`: o servidor do Apps Script, que também traz os cálculos de comissão e m² usados pelo site
+- `dev/gas-mock.js`: simulação da planilha para o modo demonstração
+- `assets.js`: logos, QR Code e fonte embutidos
+- `lib/`: [jsPDF](https://github.com/parallax/jsPDF) 4.2.1 (MIT)
 
-Fonte: Liberation Sans (SIL Open Font License 1.1), com as mesmas medidas da Arial.
+A fonte é a Liberation Sans (SIL Open Font License 1.1), com as mesmas medidas da Arial.

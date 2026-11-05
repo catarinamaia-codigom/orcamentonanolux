@@ -1,0 +1,67 @@
+/* ============ PÁGINA DO ORÇAMENTO (1500 x 844 px = 720 x 405 pt) ============ */
+.pg{width:1500px;height:844px;position:relative;overflow:hidden;background:#fff;font-family:'NXSans',Arial,Helvetica,sans-serif;color:#111719;line-height:1;-webkit-font-smoothing:antialiased}
+.pg *{box-sizing:border-box}
+.pg .a{position:absolute;white-space:nowrap}
+.pg .b{font-weight:700}
+.pg .c{text-align:center}
+.pg .wrap{white-space:normal}
+.pg .topbar{left:375px;top:0;width:750px;height:12.5px;background:linear-gradient(90deg,#15a9c3,#61c34a)}
+.pg .vline{width:2.1px;background:#e1e9ec}
+.pg .lbl{font-size:9.8px;font-weight:700;color:#7a8a91}
+.pg img{display:block}
+/* tabela */
+.pg .flow{position:absolute;left:54.2px;top:266.7px;width:1391.7px}
+.pg .intro{background:#f3f7f8;border-radius:16px;padding:25.3px 34.8px 28.5px;font-size:11.4px;line-height:14px;color:#42535b;white-space:pre-line}
+.pg .tbl{margin-top:14.6px}
+.pg .tr{display:flex;align-items:center;padding-left:20.8px}
+.pg .th{height:39.6px;background:#f1f5f6;border-radius:6.6px;font-size:12.1px;font-weight:700;color:#26343b}
+.pg .row{min-height:49px;padding-top:3.5px;padding-bottom:3.5px;margin-top:1px;background:#fff}
+.pg .row:nth-child(even){background:#f8fbfb}
+.pg .row:first-child{margin-top:0}
+.pg .td{padding:0 14px;flex-shrink:0}
+.pg .c1{width:327.1px}
+.pg .c2{width:197.9px}
+.pg .c3{width:420.8px;margin-left:8.3px}
+.pg .c4{width:118.8px;margin-left:8.4px;text-align:center}
+.pg .c5{width:127.1px;margin-left:8.3px;text-align:right}
+.pg .c6{width:129.2px;margin-left:8.3px;text-align:right}
+.pg .row .c1{font-size:13.1px;font-weight:700;color:#1e2d34;line-height:15px}
+.pg .row .c2,.pg .row .c4,.pg .row .c5{font-size:12.1px;color:#53636b;line-height:14px}
+.pg .row .c3{font-size:12.1px;color:#53636b;line-height:14px;white-space:pre-line}
+.pg .row .c6{font-size:13.1px;font-weight:700;color:#126e64}
+/* resumo pág. 1 */
+.pg .slbl{font-size:9.4px;font-weight:700;color:#77878e;top:595.4px}
+.pg .sval{font-size:15.2px;font-weight:700;color:#089dbb;top:617.1px}
+.pg .note{font-size:10.7px;line-height:12.6px;color:#53636b;white-space:normal;top:656px;width:420px}
+.pg .inv{left:995.8px;top:598.8px;width:450px;border-radius:12px;background:linear-gradient(90deg,#14a8c2,#60c24b);color:#fff;padding:17px 28px 18px}
+.pg .inv .il{font-size:13.1px;font-weight:700;text-align:center;color:#fff}
+.pg .inv .iv{font-size:32.3px;font-weight:700;text-align:center;margin-top:9px;color:#fff}
+.pg .inv .ir{display:flex;justify-content:space-between;align-items:center;font-size:13.1px;color:#fff;margin-top:9px}
+.pg .inv .ir.d{margin-top:7px;font-weight:700}
+.pg .inv .strike{position:relative;display:inline-block;opacity:.88}
+.pg .inv .strike i{position:absolute;left:-2px;right:-2px;top:50%;height:1.6px;margin-top:-.3px;background:#fff}
+.pg .inv .sep{height:1.2px;background:rgba(255,255,255,.5);margin-top:11px}
+.pg .inv .ir.t{margin-top:9px;font-size:14.5px;font-weight:700}
+.pg .inv .ir.t .v{font-size:30px}
+.pg .pnum{left:0;width:1500px;top:826.4px;font-size:10.4px;color:#718089;text-align:center;white-space:pre}
+/* pág. 2 */
+.pg .dpan{left:54.2px;top:183.3px;width:1391.7px;height:81.3px;border-radius:13.5px;background:#f3f8f9}
+.pg .dbar{left:54.2px;top:183.3px;width:10.4px;height:81.3px;border-radius:1.7px;background:#079dbb}
+.pg .dlbl{font-size:8.3px;font-weight:700;color:#7a8a91;top:200.5px}
+.pg .dval{font-size:13.1px;font-weight:700;color:#079dbb;top:230.2px}
+.pg .tpan{left:54.2px;top:285.4px;width:912.5px;height:497.9px;border-radius:83px;background:#f5f9fa}
+.pg .kc{top:352.1px;width:199px;height:91.7px;border-radius:0 15.3px 15.3px 0;background:#fff}
+.pg .kc .bar{position:absolute;left:0;top:0;bottom:0;width:6.3px;border-radius:1px}
+.pg .kc .kl{position:absolute;left:34.5px;top:19.4px;font-size:7.9px;font-weight:700;color:#7a8a91}
+.pg .kc .kv{position:absolute;left:34.5px;top:30.8px;height:50px;width:138px;display:flex;align-items:center;font-weight:700;color:#1e3c45}
+.pg .kc .kv.big{font-size:13.3px}
+.pg .kc .kv.sm{font-size:9.6px;line-height:11px}
+.pg .icard{left:87.5px;top:462.5px;width:845.8px;height:300px;border-radius:50px;background:#fff}
+.pg .dot{width:16.7px;height:16.7px;border-radius:50%;background:#e3f7f3}
+.pg .dot img{position:absolute;left:3.35px;top:3.35px;width:10px;height:10px}
+.pg .itx{font-size:10.1px;line-height:13px;color:#4d5e66;left:164px;width:740px}
+.pg .ccard{left:1065.3px;top:285.4px;width:302.7px;height:497.9px;border-radius:25px;overflow:hidden}
+.pg .ccard .bg{position:absolute;left:0;top:0;width:302.7px;height:497.9px}
+.pg .ccard .white{position:absolute;left:0;top:141.7px;width:302.7px;height:308.3px;background:rgba(255,255,255,.97)}
+.pg .wa{left:1016.7px;top:712.5px;width:400px;height:56.3px;border-radius:9.4px;background:#111719;color:#fff;font-size:12.1px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.pg .fbox{top:807.3px;width:416.7px;font-size:11.5px;color:#64757d;text-align:center}
