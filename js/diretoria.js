@@ -12,10 +12,10 @@ NX.paginas.diretoria = function (view) {
   view.innerHTML = '<div class="page"><div class="page-head"><div><h1>Painel da Diretoria</h1><div class="sub">As alterações valem para todos os vendedores a partir do próximo carregamento.</div></div></div>' +
     '<div class="dir-grid"><div style="display:flex;flex-direction:column;gap:16px">' +
       '<div class="card"><h2>Comissão</h2><div class="grid">' +
-        '<label class="f">% sobre o valor líquido da SOMMAR<input type="text" inputmode="decimal" id="dPct"></label>' +
-        '<div class="f">Cartão parcelado<select id="dModo"><option value="integral">Comissão integral (mês seguinte à 1ª parcela)</option><option value="parcelas">Dividida pelos meses das parcelas</option></select></div>' +
-        '<p class="muted full" style="margin:0;font-size:12.5px">Valor líquido = valor final − taxas da máquina de cada forma de pagamento. A comissão é paga no mês seguinte ao recebimento.</p></div></div>' +
-      '<div class="card"><h2>Taxas da máquina (%)</h2><p class="muted" style="margin:-6px 0 12px;font-size:12.5px">Aplicadas sobre o valor pago em cada forma (ex.: 50% no PIX e 50% em 12x → a taxa de 12x incide só sobre os 50%).</p><div class="taxgrid" id="dTaxas"></div></div>' +
+        '<div class="f full">Cartão parcelado<select id="dModo"><option value="integral">Comissão integral (mês seguinte à 1ª parcela)</option><option value="parcelas">Dividida pelos meses das parcelas</option></select></div>' +
+        '<p class="muted full" style="margin:0;font-size:12.5px">A comissão é calculada pelas <b>datas inseridas em cada pagamento</b> do faturamento: a data define qual tabela de vigência vale (% de comissão e taxas da máquina) e o mês de recebimento. A comissão é paga no mês seguinte ao recebimento. Valor líquido = valor do pagamento − taxa da máquina daquela forma. A % de comissão fica em cada tabela de vigência abaixo.</p></div></div>' +
+      '<div class="card"><h2>Comissão e taxas da máquina por vigência</h2><p class="muted" style="margin:-6px 0 12px;font-size:12.5px">As taxas incidem sobre o valor pago em cada forma (ex.: 50% no PIX e 50% em 12x → a taxa de 12x incide só sobre os 50%). Cada tabela vale <b>a partir da data</b> indicada até a véspera da próxima. Orçamentos usam a tabela da data de emissão; faturamentos usam a da <b>data de cada pagamento</b>. Assim, mudar taxas ou comissão não altera o que já foi feito.</p>' +
+        '<div id="dTabs"></div><button class="btn add small" id="dTabAdd" type="button" style="margin-top:10px">+ Nova tabela de taxas (com data de início)</button></div>' +
       '<div class="card"><h2>Custos e m² efetivo</h2><div class="grid">' +
         '<label class="f">Custo fixo por projeto (R$)<input type="text" inputmode="decimal" id="dFixo"></label>' +
         '<label class="f">Validade padrão do orçamento (dias)<input type="number" min="1" id="dVal"></label>' +
@@ -48,14 +48,29 @@ NX.paginas.diretoria = function (view) {
           '<div class="err full" id="uErr"></div></div></div></div>' +
     '</div></div>' +
     '<div class="savebar"><div class="inner"><span class="muted" id="dMsg" style="font-size:12.5px">Alterações de comissão, taxas, custos, catálogo e links.</span><button class="btn primary" id="dSalvar" type="button">Salvar configurações</button></div></div></div>';
-  $('#dPct').value = f2(cfg.comissaoPct); $('#dModo').value = cfg.modoParcelado; $('#dFixo').value = f2(cfg.custoFixo); $('#dVal').value = cfg.validadePadrao;
+  $('#dModo').value = cfg.modoParcelado; $('#dFixo').value = f2(cfg.custoFixo); $('#dVal').value = cfg.validadePadrao;
   $('#dFora').checked = cfg.descontarForaArea !== false; $('#dAsana').value = cfg.asanaUrl || ''; $('#dWa').value = cfg.whatsapp || '';
   var tx = cfg.textos || {};
   $('#tIntro').value = tx.intro || ''; $('#tObs').value = tx.obs || ''; $('#tPagR').value = tx.pagResumo || ''; $('#tPagD').value = tx.pagDetalhe || '';
   $('#tPrazo').value = tx.prazo || ''; $('#tExec').value = tx.execucao || ''; $('#tInfos').value = (tx.infos || []).join('\n');
   $('#tExProj').value = tx.exProjeto || ''; $('#tExLocal').value = tx.exLocal || ''; $('#tExArea').value = tx.exArea || ''; $('#tExDesc').value = tx.exDesconto || '';
   $$('[data-tturno]').forEach(function (c) { c.checked = (tx.turnos || []).indexOf(c.dataset.tturno) >= 0; });
-  $('#dTaxas').innerHTML = C.FORMAS.map(function (f) { return '<label class="f">' + esc(f) + '<input type="text" inputmode="decimal" data-tx="' + esc(f) + '" value="' + f2(num(cfg.taxas[f])) + '"></label>'; }).join('');
+  tabelas = (cfg.tabelasTaxas || []).map(function (t) { return { desde: t.desde, taxas: JSON.parse(JSON.stringify(t.taxas)), comissaoPct: t.comissaoPct != null ? t.comissaoPct : cfg.comissaoPct }; });
+  if (!tabelas.length) tabelas = [{ desde: '2000-01-01', taxas: JSON.parse(JSON.stringify(cfg.taxas || {})), comissaoPct: cfg.comissaoPct }];
+  desenharTabelas();
+  $('#dTabAdd').onclick = function () {
+    lerTabelas();
+    var ult = tabelas.slice().sort(function (a, b) { return a.desde.localeCompare(b.desde); }).pop(), d = NX.somaDias(NX.hoje(), 1);
+    while (tabelas.some(function (t) { return t.desde === d; })) d = NX.somaDias(d, 1);
+    tabelas.push({ desde: d, taxas: JSON.parse(JSON.stringify(ult.taxas)), comissaoPct: ult.comissaoPct, nova: true });
+    desenharTabelas(); NX.toast('Nova tabela criada a partir de amanhã, com a comissão e as taxas atuais. Ajuste a data e os valores.');
+  };
+  $('#dTabs').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-tdel]'); if (!b) return; lerTabelas();
+    if (tabelas.length < 2) return NX.toast('Mantenha pelo menos uma tabela de taxas.', true);
+    if (confirm('Remover esta tabela de taxas? Orçamentos e faturamentos já salvos não mudam; novos cálculos dessas datas passam a usar a tabela anterior.')) { tabelas.splice(+b.dataset.tdel, 1); desenharTabelas(); }
+  });
+  $('#dTabs').addEventListener('change', function (e) { if (e.target.dataset.tdesde != null) { lerTabelas(); desenharTabelas(); } });
   produtos(); usuarios();
   $('#dProdAdd').onclick = function () { lerProdutos(); var k = 'novo-' + Math.random().toString(36).slice(2, 6); cfg.produtos[k] = { rotulo: 'Novo produto', nome: 'Novo produto', desc: '', unidade: 'un', valor: 0, ref: 0, contaArea: false }; produtos(); };
   $('#dProd').addEventListener('click', function (e) { var b = e.target.closest('[data-pdel]'); if (!b) return; lerProdutos(); if (Object.keys(cfg.produtos).length <= 1) return NX.toast('Mantenha pelo menos um produto.', true); if (confirm('Remover este produto do catálogo? Orçamentos já salvos não mudam.')) { delete cfg.produtos[b.dataset.pdel]; produtos(); } });
@@ -65,6 +80,32 @@ NX.paginas.diretoria = function (view) {
   $('#dUsers').addEventListener('click', function (e) { var b = e.target.closest('[data-uedit]'); if (!b) return; var u = S.users.filter(function (x) { return x.id === b.dataset.uedit; })[0]; if (!u) return;
     $('#uId').value = u.id; $('#uNome').value = u.nome; $('#uPapel').value = u.papel; $('#uAtivo').checked = u.ativo !== false; $('#uPin').value = ''; $('#uTit').textContent = 'Editar ' + u.nome; $('#uPinHint').textContent = '(deixe vazio para manter)'; $('#uNome').focus(); });
 };
+var tabelas = [];
+function desenharTabelas() {
+  var hoje = NX.hoje(), ord = tabelas.map(function (t, i) { return { t: t, i: i }; }).sort(function (a, b) { return b.t.desde.localeCompare(a.t.desde); });
+  var asc = ord.slice().reverse(), vigente = null;
+  asc.forEach(function (x) { if (x.t.desde <= hoje) vigente = x; });
+  if (!vigente && asc.length) vigente = asc[0];
+  $('#dTabs').innerHTML = ord.map(function (x) {
+    var pos = asc.indexOf(x), prox = asc[pos + 1], ate = prox ? NX.somaDias(prox.t.desde, -1) : '';
+    var st = x === vigente ? '<span class="tag ok">Em vigor</span>' : x.t.desde > hoje ? '<span class="tag valido">Futura</span>' : '<span class="tag invalido">Encerrada</span>';
+    var periodo = (x.t.desde <= '2000-01-01' ? 'Desde o início' : 'De ' + NX.dataBR(x.t.desde)) + (ate ? ' até ' + NX.dataBR(ate) : ' em diante') + ' · comissão ' + f2(num(x.t.comissaoPct)) + '%';
+    var aberto = x === vigente || x.t.desde > hoje || x.t.nova;
+    return '<details class="taxtab"' + (aberto ? ' open' : '') + ' data-ti="' + x.i + '"><summary><span class="tt-per">' + periodo + '</span>' + st + '</summary>' +
+      '<div class="tt-head"><label class="f">Vale a partir de<input type="date" data-tdesde="' + x.i + '" value="' + (x.t.desde <= '2000-01-01' ? '' : esc(x.t.desde)) + '"' + (x.t.desde <= '2000-01-01' ? ' placeholder="desde o início"' : '') + '></label>' +
+      '<label class="f">Comissão sobre o líquido (%)<input type="text" inputmode="decimal" data-tpct="' + x.i + '" value="' + f2(num(x.t.comissaoPct)) + '"></label>' +
+      '<button class="btn tiny danger" type="button" data-tdel="' + x.i + '">Remover tabela</button></div>' +
+      '<div class="taxgrid">' + C.FORMAS.map(function (f) { return '<label class="f">' + esc(f) + '<input type="text" inputmode="decimal" data-tx="' + esc(f) + '" value="' + f2(num(x.t.taxas[f])) + '"></label>'; }).join('') + '</div></details>';
+  }).join('');
+}
+function lerTabelas() {
+  $$('#dTabs [data-ti]').forEach(function (el) {
+    var t = tabelas[+el.dataset.ti], d = $('[data-tdesde]', el).value;
+    t.desde = d || (t.desde <= '2000-01-01' ? '2000-01-01' : '');
+    $$('[data-tx]', el).forEach(function (i) { t.taxas[i.dataset.tx] = num(i.value); });
+    t.comissaoPct = num($('[data-tpct]', el).value);
+  });
+}
 function produtos() {
   var ks = Object.keys(cfg.produtos);
   $('#dProd').innerHTML = '<div class="tbl-wrap"><table class="t prod-tbl"><thead><tr><th>Nome no orçamento</th><th>Unid.</th><th>Preço padrão</th><th>Ref. m²</th><th>Soma área</th><th></th></tr></thead><tbody>' + ks.map(function (k) {
@@ -88,15 +129,20 @@ function lerProdutos() {
 }
 function salvarCfg() {
   lerProdutos();
-  cfg.comissaoPct = num($('#dPct').value); cfg.modoParcelado = $('#dModo').value; cfg.custoFixo = num($('#dFixo').value);
+  cfg.modoParcelado = $('#dModo').value; cfg.custoFixo = num($('#dFixo').value);
   cfg.validadePadrao = Math.max(1, Math.round(num($('#dVal').value) || 10)); cfg.descontarForaArea = $('#dFora').checked;
   cfg.asanaUrl = $('#dAsana').value.trim(); cfg.whatsapp = NX.digitos($('#dWa').value);
-  cfg.taxas = {}; $$('[data-tx]').forEach(function (i) { cfg.taxas[i.dataset.tx] = num(i.value); });
+  lerTabelas();
+  var datas = tabelas.map(function (t) { return t.desde; });
+  if (datas.some(function (d) { return !/^\d{4}-\d{2}-\d{2}$/.test(d); })) return NX.toast('Preencha a data de início de todas as tabelas de taxas.', true);
+  if (datas.some(function (d, i) { return datas.indexOf(d) !== i; })) return NX.toast('Duas tabelas de taxas não podem começar na mesma data.', true);
+  cfg.tabelasTaxas = tabelas.map(function (t) { return { desde: t.desde, taxas: t.taxas, comissaoPct: t.comissaoPct }; });
+  delete cfg.taxas;
   cfg.textos = { intro: $('#tIntro').value.trim(), obs: $('#tObs').value.trim(), pagResumo: $('#tPagR').value.trim(), pagDetalhe: $('#tPagD').value.trim(),
     prazo: $('#tPrazo').value.trim(), execucao: $('#tExec').value.trim(), infos: $('#tInfos').value.split('\n').map(function (x) { return x.trim(); }).filter(Boolean),
     turnos: $$('[data-tturno]').filter(function (c) { return c.checked; }).map(function (c) { return c.dataset.tturno; }),
     exProjeto: $('#tExProj').value.trim(), exLocal: $('#tExLocal').value.trim(), exArea: $('#tExArea').value.trim(), exDesconto: $('#tExDesc').value.trim() };
-  if (cfg.comissaoPct < 0 || cfg.comissaoPct > 100) return NX.toast('A comissão deve ficar entre 0% e 100%.', true);
+  if (tabelas.some(function (t) { return t.comissaoPct < 0 || t.comissaoPct > 100; })) return NX.toast('A comissão de cada tabela deve ficar entre 0% e 100%.', true);
   var b = $('#dSalvar'); b.disabled = true; $('#dMsg').textContent = 'Salvando…';
   NX.api('salvarConfig', { config: cfg }).then(function (r) {
     S.cfg = C.mesclar(r.config); b.disabled = false; $('#dMsg').textContent = 'Salvo às ' + new Date().toTimeString().slice(0, 5) + '.'; NX.toast('Configurações salvas');

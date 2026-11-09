@@ -16,16 +16,17 @@ Site para montar propostas comerciais Nanolux em PDF (formato apresentação 16:
   - A tabela mostra o desconto (nome e valor), o valor do m², o m² efetivo, o valor total, a simulação e o link do Asana.
   - **Atualizar** cria a próxima versão (V02, V03…) e invalida a anterior.
   - **Faturar** pede as formas de pagamento (obrigatórias, cada uma com valor e data), recalcula a comissão, comemora a venda com uma animação diferente a cada vez e gera o texto para copiar no Grupo de Pagamentos do WhatsApp.
-  - **Alterar faturamento** exige um motivo e guarda o histórico (antes e depois).
+  - **Ajustes no faturamento:** área a mais e desconto a mais, com observação interna obrigatória. O orçamento é atualizado junto, inclusive as formas de pagamento reais.
+  - **Alterar faturamento** exige um motivo e guarda o histórico (antes e depois). O orçamento também é atualizado.
+  - **Excluir faturamento** exige um motivo. O orçamento volta para PDF baixado ou Rascunho e pode ser faturado de novo; a exclusão fica registrada na planilha.
 - **Comissões**: o vendedor vê só os dele; a Diretoria vê todos e um resumo por vendedor.
   - Gráfico das comissões por mês de faturamento.
   - Formas de pagamento mais usadas.
   - Média do m² real, área média e tempo médio do orçamento ao 1º pagamento.
-  - Previsão de recebimento: a comissão é paga no mês seguinte ao recebimento, proporcional ao que foi recebido em cada mês.
+  - Previsão de recebimento: a comissão é calculada pelas datas inseridas em cada pagamento e paga no mês seguinte ao recebimento, proporcional ao que foi recebido em cada mês.
 - **Painel da Diretoria**:
-  - % de comissão sobre o valor líquido.
+  - **Tabelas de vigência** com a % de comissão e as taxas da máquina (PIX, Cartão 1x a 12x, Boleto, Transferência e Dinheiro). Cada tabela vale a partir de uma data até a véspera da próxima: orçamentos usam a tabela da data de emissão e faturamentos, a da **data de cada pagamento**. Assim, mudar taxas ou comissão não altera o que já foi feito.
   - Cartão parcelado: comissão integral ou dividida pelas parcelas.
-  - Taxas da máquina (PIX, Cartão 1x a 12x, Boleto, Transferência e Dinheiro).
   - Custo fixo por projeto e catálogo de produtos com preço padrão e **referência do m²**.
   - **Textos padrão da proposta** (apresentação, observações, pagamento, prazo, execução, turnos, informações da pág. 2) e os exemplos dos campos vazios.
   - Links do Asana e do WhatsApp.

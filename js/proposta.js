@@ -254,7 +254,8 @@ NX.paginas.proposta = function (view) {
       '<div class="calc-grid">' +
         '<div class="cbox"><h3>Formas de pagamento (simulação)</h3><div id="simRows"></div>' +
           '<div class="inline" style="justify-content:space-between;margin-top:6px"><button class="btn add tiny" id="simAdd" type="button">+ forma de pagamento</button><span class="sumline" id="simSum"></span></div>' +
-          '<button class="linkbtn" id="simPag" type="button" style="margin-top:10px">usar esta simulação na “Condição de pagamento” do PDF</button></div>' +
+          '<div class="muted" id="simTab" style="font-size:11.5px;margin-top:8px"></div>' +
+          '<button class="linkbtn" id="simPag" type="button" style="margin-top:8px">usar esta simulação na “Condição de pagamento” do PDF</button></div>' +
         '<div class="cbox"><h3>m² efetivo</h3><div class="sim-bar" id="simBar" hidden><span>Simulando nas barras — ainda não está no orçamento</span><span class="inline" style="gap:6px"><button class="btn tiny primary" id="simTudo" type="button">Aplicar tudo</button><button class="linkbtn" id="simReset" type="button">descartar</button></span></div>' +
           '<div class="m2big"><div class="v" id="m2v">—</div><div class="r" id="m2r"></div></div><div id="verdict"></div>' +
           '<div class="slider-box" id="slBox"><div class="top"><span>Valor do m² no orçamento</span><b id="slV"></b></div><input type="range" id="sl" min="0" max="1000" step="1" aria-label="Valor do m²"><div class="range-scale"><span id="slMin"></span><span id="slMax"></span></div>' +
@@ -447,6 +448,8 @@ function calculadora() {
   var a = comSim(), temArea = a.area > 0, simulando = sim.preco != null || sim.desc != null;
   a.pagamentos.forEach(function (p, i) { var el = $('[data-sv="' + i + '"]'); if (el) el.innerHTML = brl(p.valor) + (p.taxaPct ? '<br><small>taxa ' + f2(p.taxaPct) + '%</small>' : ''); });
   var soma = state.simulacao.reduce(function (s, p) { return s + num(p.pct); }, 0), sOk = Math.abs(soma - 100) < 0.01;
+  var tab = C.tabelaEm(S.cfg, state.emissao), st = $('#simTab');
+  if (st) st.textContent = 'Simulação com a tabela de comissão e taxas ' + (tab.desde <= '2000-01-01' ? 'inicial' : 'vigente desde ' + NX.dataBR(tab.desde)) + ' (data de emissão ' + NX.dataBR(state.emissao) + '). No faturamento, valem as datas de cada pagamento.';
   var ss = $('#simSum'); ss.textContent = 'Total: ' + String(Math.round(soma * 100) / 100).replace('.', ',') + '%' + (sOk ? '' : ' (precisa somar 100%)'); ss.classList.toggle('bad', !sOk);
   $('#fin').innerHTML = (simulando ? '<div class="sim-tag">Valores com a simulação das barras</div>' : '') +
     '<div class="kv"><span>Valor final ao cliente</span><b>' + brl(a.final) + '</b></div>' +

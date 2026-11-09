@@ -58,16 +58,38 @@ var NX_CALC = (function () {
     var n = parseFloat(s); return isFinite(n) ? n : 0;
   }
   function r2(v) { return Math.round((v + 1e-9) * 100) / 100; }
+  function hojeISO() { var d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  function f2s(v) { return (Math.round((num(v) + 1e-9) * 100) / 100).toFixed(2).replace('.', ','); }
+  /* Tabelas de taxas da máquina com vigência: cada uma vale a partir de "desde" até a véspera da próxima */
+  function normTabelas(cfg) {
+    var pctPadrao = cfg.comissaoPct != null ? num(cfg.comissaoPct) : CONFIG_PADRAO.comissaoPct;
+    var base = (cfg.tabelasTaxas && cfg.tabelasTaxas.length) ? cfg.tabelasTaxas : [{ desde: '2000-01-01', taxas: cfg.taxas || {} }], porData = {};
+    base.forEach(function (t) {
+      var tx = JSON.parse(JSON.stringify(CONFIG_PADRAO.taxas)), k;
+      for (k in (t.taxas || {})) tx[k] = num(t.taxas[k]);
+      var desde = /^\d{4}-\d{2}-\d{2}$/.test(t.desde || '') ? t.desde : '2000-01-01';
+      porData[desde] = { desde: desde, taxas: tx, comissaoPct: t.comissaoPct != null && t.comissaoPct !== '' ? num(t.comissaoPct) : pctPadrao };
+    });
+    return Object.keys(porData).sort().map(function (k) { return porData[k]; });
+  }
+  function tabelaEm(cfg, data) {
+    var tabs = cfg.tabelasTaxas && cfg.tabelasTaxas.length ? cfg.tabelasTaxas : normTabelas(cfg), d = /^\d{4}-\d{2}-\d{2}/.test(data || '') ? String(data).slice(0, 10) : hojeISO(), t = tabs[0];
+    tabs.forEach(function (x) { if (x.desde <= d) t = x; });
+    return t;
+  }
   function mesclar(cfg) {
     var c = JSON.parse(JSON.stringify(CONFIG_PADRAO)), k;
     cfg = cfg || {};
-    for (k in cfg) if (k !== 'taxas' && k !== 'produtos' && k !== 'textos') c[k] = cfg[k];
-    for (k in (cfg.taxas || {})) c.taxas[k] = cfg.taxas[k];
+    for (k in cfg) if (k !== 'taxas' && k !== 'produtos' && k !== 'textos' && k !== 'tabelasTaxas') c[k] = cfg[k];
     for (k in (cfg.textos || {})) if (cfg.textos[k] != null) c.textos[k] = cfg.textos[k];
     if (cfg.produtos) c.produtos = cfg.produtos;
+    c.tabelasTaxas = normTabelas(cfg);
+    var atual = tabelaEm(c, hojeISO());
+    c.taxas = atual.taxas; c.comissaoPct = atual.comissaoPct;
     return c;
   }
-  function taxa(cfg, forma) { var t = cfg.taxas || {}; return num(t[forma]) / 100; }
+  function taxa(cfg, forma, data) { return num(tabelaEm(cfg, data).taxas[forma]) / 100; }
+  function pctComissao(cfg, data) { return num(tabelaEm(cfg, data).comissaoPct); }
   function parcelas(forma) { var m = /(\d+)x/.exec(forma || ''); return m ? +m[1] : 1; }
   function eCartao(forma) { return /^Cart/.test(forma || ''); }
   function refItem(cfg, it) {
@@ -106,19 +128,39 @@ var NX_CALC = (function () {
       pays = sim.map(function (p) { return { forma: p.forma, pct: num(p.pct), valor: r2(t.final * num(p.pct) / 100) }; });
     }
     var somaPag = 0, taxas = 0;
-    pays.forEach(function (p) { p.taxa = r2(p.valor * taxa(cfg, p.forma)); p.taxaPct = taxa(cfg, p.forma) * 100; somaPag += p.valor; taxas += p.taxa; });
+    pays.forEach(function (p) { var tx = taxa(cfg, p.forma, p.data || d.emissao); p.taxa = r2(p.valor * tx); p.taxaPct = tx * 100; somaPag += p.valor; taxas += p.taxa; });
     somaPag = r2(somaPag); taxas = r2(taxas);
     var liquido = r2(t.final - taxas);
     var fixos = r2((cfg.descontarForaArea !== false ? t.foraArea : 0) + num(cfg.custoFixo));
     var m2ef = t.area > 0 ? r2((t.final - fixos - taxas) / t.area) : 0;
-    var pct = num(cfg.comissaoPct);
-    pays.forEach(function (p) { p.comissao = r2((p.valor - p.taxa) * pct / 100); });
-    var comissao = r2(liquido * pct / 100);
+    var comissao = 0;
+    pays.forEach(function (p) { p.comissaoPct = pctComissao(cfg, p.data || d.emissao); p.comissao = r2((p.valor - p.taxa) * p.comissaoPct / 100); comissao += p.comissao; });
+    comissao = r2(comissao);
+    var pcts = pays.map(function (p) { return p.comissaoPct; }).filter(function (v, i, l) { return l.indexOf(v) === i; });
+    var pct = pcts.length === 1 ? pcts[0] : (liquido > 0 ? r2(comissao / liquido * 100) : 0);
     return {
       total: t.total, area: t.area, foraArea: t.foraArea, desc: t.desc, nomeDesc: t.nomeDesc, final: t.final, ref: t.ref, valorM2: t.valorM2,
       pagamentos: pays, somaPag: somaPag, taxas: taxas, liquido: liquido, fixos: fixos, m2ef: m2ef, comissaoPct: pct, comissao: comissao,
       precisaAutorizacao: t.area > 0 && t.ref > 0 && m2ef < t.ref - 0.004
     };
+  }
+  /* Ajustes feitos no faturamento: área a mais (novo item) e desconto a mais (somado ao desconto do orçamento) */
+  function temAjustes(aj) { return !!aj && (num(aj.areaQtd) > 0 || num(aj.descExtra) > 0); }
+  function aplicarAjustes(d, aj, cfg) {
+    d = JSON.parse(JSON.stringify(d || {})); aj = aj || {};
+    var area = num(aj.areaQtd), extra = num(aj.descExtra);
+    if (area > 0) {
+      var base = (d.itens || []).filter(function (it) { return it.contaArea; })[0], p = (cfg && cfg.produtos && cfg.produtos.nanolux) || {};
+      var preco = num(aj.areaValor) > 0 ? num(aj.areaValor) : (base ? num(base.valor) : num(p.valor));
+      d.itens = (d.itens || []).concat([{ id: 'aj' + Math.random().toString(36).slice(2, 8), preset: base ? base.preset : 'nanolux', nome: base ? base.nome : (p.nome || 'Aplicação completa da resina Nanolux'),
+        area: String(aj.areaRef || '').trim() || 'Área adicional (faturamento)', desc: base ? base.desc : (p.desc || ''), qtd: f2s(area), unidade: base ? base.unidade : 'm²', valor: f2s(preco), contaArea: true, ajuste: true }]);
+    }
+    if (extra > 0) {
+      var t = totais(d, cfg);
+      d.descTipo = 'valor'; d.descValor = f2s(Math.min(t.total, t.desc + extra));
+      if (!String(d.descNome || '').trim()) d.descNome = 'Desconto';
+    }
+    return d;
   }
   function ym(iso) { return String(iso || '').slice(0, 7); }
   function somaMes(ymStr, n) {
@@ -133,7 +175,7 @@ var NX_CALC = (function () {
     var out = [];
     (pagamentos || []).forEach(function (p) {
       if (!p.data) return;
-      var c = p.comissao != null ? num(p.comissao) : r2((num(p.valor) - num(p.valor) * taxa(cfg, p.forma)) * num(cfg.comissaoPct) / 100);
+      var c = p.comissao != null ? num(p.comissao) : r2((num(p.valor) - num(p.valor) * taxa(cfg, p.forma, p.data)) * pctComissao(cfg, p.data) / 100);
       var n = (eCartao(p.forma) && cfg.modoParcelado === 'parcelas') ? parcelas(p.forma) : 1;
       var base = ym(p.data), parte = r2(c / n), acum = 0;
       for (var k = 0; k < n; k++) {
@@ -143,7 +185,7 @@ var NX_CALC = (function () {
     });
     return out;
   }
-  return { FORMAS: FORMAS, CONFIG_PADRAO: CONFIG_PADRAO, num: num, r2: r2, mesclar: mesclar, totais: totais, analise: analise, agenda: agenda, ym: ym, somaMes: somaMes, parcelas: parcelas, eCartao: eCartao };
+  return { FORMAS: FORMAS, CONFIG_PADRAO: CONFIG_PADRAO, num: num, r2: r2, f2s: f2s, hojeISO: hojeISO, mesclar: mesclar, tabelaEm: tabelaEm, taxa: taxa, pctComissao: pctComissao, totais: totais, analise: analise, agenda: agenda, temAjustes: temAjustes, aplicarAjustes: aplicarAjustes, ym: ym, somaMes: somaMes, parcelas: parcelas, eCartao: eCartao };
 })();
 
 /* ===================== SERVIDOR ===================== */
@@ -179,6 +221,7 @@ function nxRotear(req) {
   if (a === 'faturar') return nxComTrava(function () { return nxFaturar(u, req); });
   if (a === 'vincularAsana') return nxComTrava(function () { return nxVincularAsana(u, req); });
   if (a === 'alterarFaturamento') return nxComTrava(function () { return nxAlterarFaturamento(u, req); });
+  if (a === 'excluirFaturamento') return nxComTrava(function () { return nxExcluirFaturamento(u, req); });
   if (a === 'salvarConfig') { nxExigirDiretor(u); return nxComTrava(function () { return nxSalvarConfig(req.config); }); }
   if (a === 'salvarUsuario') { nxExigirDiretor(u); return nxComTrava(function () { return nxSalvarUsuario(req.usuario); }); }
   throw new Error('Ação desconhecida: ' + a);
@@ -283,7 +326,7 @@ function nxConfig() {
 function nxCarregar(u) {
   var dir = u.papel === 'diretor';
   var orcs = nxLer('Orcamentos').filter(function (o) { return dir || o.vendedorId === u.id; });
-  var fats = nxLer('Faturamentos').filter(function (f) { return dir || f.vendedorId === u.id; });
+  var fats = nxLer('Faturamentos').filter(function (f) { return !f.excluido && (dir || f.vendedorId === u.id); });
   var usuarios = dir ? nxLer('Usuarios').map(nxPublico) : [nxPublico(u)];
   return { ok: true, usuario: nxPublico(u), config: nxConfig(), orcamentos: orcs, faturamentos: fats, usuarios: usuarios, agora: new Date().toISOString() };
 }
@@ -329,18 +372,21 @@ function nxFaturar(u, req) {
   if (!o || (u.papel !== 'diretor' && o.vendedorId !== u.id)) throw new Error('Orçamento não encontrado.');
   if (o.status === 'faturado') throw new Error('Este orçamento já foi faturado.');
   if (o.substituidoPor) throw new Error('Este orçamento foi atualizado por uma versão mais nova. Fature a versão atual.');
-  var pags = nxPagamentosValidos(req.pagamentos);
-  var a = NX_CALC.analise(o.dados, cfg, pags);
+  var pags = nxPagamentosValidos(req.pagamentos), aj = nxAjustes(req.ajustes, u), agora = new Date().toISOString();
+  var dados = aj ? NX_CALC.aplicarAjustes(o.dados, aj, cfg) : o.dados;
+  var a = NX_CALC.analise(dados, cfg, pags);
   if (Math.abs(a.somaPag - a.final) > 0.009) throw new Error('A soma dos pagamentos (' + a.somaPag.toFixed(2) + ') precisa ser igual ao valor final (' + a.final.toFixed(2) + ').');
-  var agora = new Date().toISOString(), datas = a.pagamentos.map(function (p) { return p.data; }).sort();
+  var datas = a.pagamentos.map(function (p) { return p.data; }).sort();
   var f = {
     id: Utilities.getUuid(), orcamentoId: o.id, grupo: o.grupo, orcamento: o.id, numero: o.numero, versao: o.versao, vendedorId: o.vendedorId, vendedor: o.vendedor,
     cliente: o.cliente, telefone: o.telefone, local: o.local, projeto: o.projeto, orcCriadoEm: (todos.filter(function (x) { return x.grupo === o.grupo; }).map(function (x) { return x.criadoEm; }).sort()[0] || o.criadoEm),
     total: a.total, desconto: a.desc, nomeDesconto: a.nomeDesc, valorFinal: a.final, area: a.area, valorM2: a.valorM2, m2Efetivo: a.m2ef, ref: a.ref,
     taxas: a.taxas, liquido: a.liquido, comissaoPct: a.comissaoPct, comissao: a.comissao, pagamentos: a.pagamentos,
-    agenda: NX_CALC.agenda(a.pagamentos, cfg), modoParcelado: cfg.modoParcelado, primeiroPagamento: datas[0], faturadoEm: agora, faturadoPor: u.nome, obs: String(req.obs || '')
+    agenda: NX_CALC.agenda(a.pagamentos, cfg), modoParcelado: cfg.modoParcelado, primeiroPagamento: datas[0], faturadoEm: agora, faturadoPor: u.nome, obs: String(req.obs || ''),
+    ajustes: aj ? [aj] : []
   };
   nxGravar('Faturamentos', f);
+  nxAtualizarOrcDoFaturamento(o, dados, a, aj, cfg, u, 'Faturado');
   o.status = 'faturado'; o.faturamentoId = f.id; o.faturadoEm = agora;
   nxGravar('Orcamentos', o);
   return { ok: true, faturamento: f, orcamento: o };
@@ -393,17 +439,56 @@ function nxAlterarFaturamento(u, req) {
   if (!f || (u.papel !== 'diretor' && f.vendedorId !== u.id)) throw new Error('Faturamento não encontrado.');
   var o = nxLer('Orcamentos').filter(function (x) { return x.id === f.orcamentoId; })[0];
   if (!o) throw new Error('Orçamento do faturamento não encontrado.');
-  var pags = nxPagamentosValidos(req.pagamentos), a = NX_CALC.analise(o.dados, cfg, pags);
+  var pags = nxPagamentosValidos(req.pagamentos), aj = nxAjustes(req.ajustes, u);
+  var dados = aj ? NX_CALC.aplicarAjustes(o.dados, aj, cfg) : o.dados, a = NX_CALC.analise(dados, cfg, pags);
   if (Math.abs(a.somaPag - a.final) > 0.009) throw new Error('A soma dos pagamentos (' + a.somaPag.toFixed(2) + ') precisa ser igual ao valor final (' + a.final.toFixed(2) + ').');
-  var antes = { pagamentos: f.pagamentos, taxas: f.taxas, liquido: f.liquido, comissao: f.comissao, comissaoPct: f.comissaoPct, m2Efetivo: f.m2Efetivo, obs: f.obs };
+  var antes = { pagamentos: f.pagamentos, taxas: f.taxas, liquido: f.liquido, comissao: f.comissao, comissaoPct: f.comissaoPct, m2Efetivo: f.m2Efetivo, obs: f.obs, valorFinal: f.valorFinal, area: f.area, desconto: f.desconto };
   var datas = a.pagamentos.map(function (p) { return p.data; }).sort();
+  f.total = a.total; f.desconto = a.desc; f.nomeDesconto = a.nomeDesc; f.valorFinal = a.final; f.area = a.area; f.valorM2 = a.valorM2; f.ref = a.ref;
   f.pagamentos = a.pagamentos; f.taxas = a.taxas; f.liquido = a.liquido; f.comissaoPct = a.comissaoPct; f.comissao = a.comissao; f.m2Efetivo = a.m2ef;
+  if (aj) { f.ajustes = f.ajustes || []; f.ajustes.push(aj); }
   f.agenda = NX_CALC.agenda(a.pagamentos, cfg); f.modoParcelado = cfg.modoParcelado; f.primeiroPagamento = datas[0];
   if (req.obs != null) f.obs = String(req.obs);
   f.historico = f.historico || [];
-  f.historico.push({ em: new Date().toISOString(), por: u.nome, porId: u.id, motivo: motivo, antes: antes,
-    depois: { pagamentos: f.pagamentos, taxas: f.taxas, liquido: f.liquido, comissao: f.comissao, comissaoPct: f.comissaoPct, m2Efetivo: f.m2Efetivo, obs: f.obs } });
+  f.historico.push({ em: new Date().toISOString(), por: u.nome, porId: u.id, motivo: motivo, antes: antes, ajuste: aj || null,
+    depois: { pagamentos: f.pagamentos, taxas: f.taxas, liquido: f.liquido, comissao: f.comissao, comissaoPct: f.comissaoPct, m2Efetivo: f.m2Efetivo, obs: f.obs, valorFinal: f.valorFinal, area: f.area, desconto: f.desconto } });
   f.alteradoEm = new Date().toISOString();
   nxGravar('Faturamentos', f);
-  return { ok: true, faturamento: f };
+  nxAtualizarOrcDoFaturamento(o, dados, a, aj, cfg, u, 'Faturamento alterado: ' + motivo);
+  nxGravar('Orcamentos', o);
+  return { ok: true, faturamento: f, orcamento: o };
+}
+
+/* valida os ajustes do faturamento; exige observação interna quando houver área ou desconto a mais */
+function nxAjustes(aj, u) {
+  if (!NX_CALC.temAjustes(aj)) return null;
+  var obs = String(aj.obsInterna || '').trim();
+  if (obs.length < 5) throw new Error('Escreva a observação interna explicando a área ou o desconto a mais (o orçamento não foi alterado antes).');
+  if (NX_CALC.num(aj.areaQtd) < 0 || NX_CALC.num(aj.descExtra) < 0) throw new Error('Os ajustes não podem ser negativos.');
+  return { em: new Date().toISOString(), por: u.nome, areaQtd: NX_CALC.num(aj.areaQtd), areaValor: NX_CALC.num(aj.areaValor), areaRef: String(aj.areaRef || '').trim(), descExtra: NX_CALC.num(aj.descExtra), obsInterna: obs };
+}
+/* leva para o orçamento o que mudou no faturamento: itens/desconto ajustados e as formas de pagamento reais */
+function nxAtualizarOrcDoFaturamento(o, dados, a, aj, cfg, u, nota) {
+  var d = JSON.parse(JSON.stringify(dados || {}));
+  if (a.final > 0) d.simulacao = a.pagamentos.map(function (p) { return { forma: p.forma, pct: String(Math.round(p.valor / a.final * 10000) / 100).replace('.', ',') }; });
+  o.dados = d; nxResumo(o, cfg); o.atualizadoEm = new Date().toISOString();
+  o.historicoFaturamento = o.historicoFaturamento || [];
+  o.historicoFaturamento.push({ em: o.atualizadoEm, por: u.nome, nota: nota, ajuste: aj || null, valorFinal: a.final });
+}
+function nxExcluirFaturamento(u, req) {
+  var motivo = String(req.motivo || '').trim();
+  if (motivo.length < 5) throw new Error('Escreva o motivo da exclusão.');
+  var f = nxLer('Faturamentos').filter(function (x) { return x.id === req.id; })[0];
+  if (!f || f.excluido || (u.papel !== 'diretor' && f.vendedorId !== u.id)) throw new Error('Faturamento não encontrado.');
+  var agora = new Date().toISOString();
+  f.excluido = true; f.excluidoEm = agora; f.excluidoPor = u.nome; f.motivoExclusao = motivo;
+  nxGravar('Faturamentos', f);
+  var o = nxLer('Orcamentos').filter(function (x) { return x.id === f.orcamentoId; })[0];
+  if (o && o.faturamentoId === f.id) {
+    o.status = o.pdfEm ? 'pdf' : 'rascunho'; o.faturamentoId = ''; o.faturadoEm = ''; o.atualizadoEm = agora;
+    o.historicoFaturamento = o.historicoFaturamento || [];
+    o.historicoFaturamento.push({ em: agora, por: u.nome, nota: 'Faturamento excluído: ' + motivo, valorFinal: f.valorFinal });
+    nxGravar('Orcamentos', o);
+  }
+  return { ok: true, faturamentoId: f.id, orcamento: o || null };
 }

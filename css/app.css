@@ -412,3 +412,13 @@ button.cli-nome:hover{color:var(--teal-d)}
 .dup-item .t span{color:var(--muted)}
 details.card.calc > summary{justify-content:flex-start}
 details.card.calc > summary::after{margin-left:auto}
+
+.taxtab{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#fbfdfd}
+.taxtab > summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;font-weight:700;font-size:13.5px}
+.taxtab > summary::-webkit-details-marker{display:none}
+.taxtab[open] > summary{margin-bottom:10px}
+.tt-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.tt-head .f{max-width:200px}
+.aj-box{border:1px dashed #f1cf7a;background:#fffbf0;border-radius:12px;padding:12px;margin-bottom:12px}
+.aj-box h3{color:#8a5300}
+.aj-res{display:flex;justify-content:space-between;gap:10px;font-size:13px;margin-top:8px;padding-top:8px;border-top:1px dashed #f1cf7a;flex-wrap:wrap}
