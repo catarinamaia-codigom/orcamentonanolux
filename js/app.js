@@ -24,6 +24,17 @@ NX.mesNome = function (ym, curto) { var m = +String(ym).slice(5, 7) - 1, y = Str
 NX.norm = function (s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); };
 NX.digitos = function (s) { return String(s || '').replace(/\D/g, ''); };
 NX.url = function (s) { s = String(s || '').trim(); return /^https?:\/\//i.test(s) ? s : ''; };
+NX.versao = function (o) { var v = o && o.dados && String(o.dados.versao || '').trim(); return v || ('V' + NX.pad((o && o.versao) || 1)); };
+NX.carregarScript = function (src) {
+  NX._scripts = NX._scripts || {};
+  if (!NX._scripts[src]) NX._scripts[src] = new Promise(function (ok, erro) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { delete NX._scripts[src]; erro(new Error('Não foi possível carregar ' + src)); }; document.head.appendChild(s); });
+  return NX._scripts[src];
+};
+NX.baixarArquivo = function (bytes, nome, mime) {
+  var url = URL.createObjectURL(new Blob([bytes], { type: mime || 'application/octet-stream' })), a = document.createElement('a');
+  a.href = url; a.download = nome; document.body.appendChild(a); a.click();
+  setTimeout(function () { URL.revokeObjectURL(url); if (a.parentNode) a.parentNode.removeChild(a); }, 4000);
+};
 NX.clienteRotulo = function (d) { var n = (d.cliente || '').trim() || 'Nome do cliente', t = (d.telefone || '').trim(); return t ? n + ' | ' + t : n; };
 
 NX.toast = function (m, erro) {
@@ -63,11 +74,12 @@ var IC = NX.IC = {
   link: '<svg viewBox="0 0 24 24"><path d="M10 14a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 10a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>',
   alerta: '<svg viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01"/></svg>',
   ok: '<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>',
-  mais: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>'
+  mais: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+  correcao: '<svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v4M12 14h.01"/></svg>'
 };
 
 /* ---------- sessão e API ---------- */
-var S = NX.S = { token: null, user: null, cfg: C.mesclar({}), orcs: [], fats: [], users: [], demo: false, carregadoEm: 0 };
+var S = NX.S = { token: null, user: null, cfg: C.mesclar({}), orcs: [], fats: [], users: [], materiais: [], correcoes: [], demo: false, carregadoEm: 0 };
 var API = (window.NX_CONFIG && window.NX_CONFIG.apiUrl || '').trim();
 try { if (!API && localStorage.getItem('nx-api')) API = localStorage.getItem('nx-api'); } catch (e) {}
 try { S.token = localStorage.getItem('nx-token'); } catch (e) {}
@@ -87,13 +99,14 @@ NX.api = function (acao, dados) {
 };
 NX.recarregar = function () {
   return NX.api('carregar').then(function (r) {
-    S.user = r.usuario; S.cfg = C.mesclar(r.config); S.orcs = r.orcamentos || []; S.fats = r.faturamentos || []; S.users = r.usuarios || []; S.carregadoEm = Date.now();
+    S.user = r.usuario; S.cfg = C.mesclar(r.config); S.orcs = r.orcamentos || []; S.fats = r.faturamentos || []; S.users = r.usuarios || [];
+    S.materiais = r.materiais || []; S.correcoes = r.correcoes || []; S.carregadoEm = Date.now();
     return r;
   });
 };
 NX.eDiretor = function () { return S.user && S.user.papel === 'diretor'; };
 NX.sair = function (silencioso) {
-  S.token = null; S.user = null; S.orcs = []; S.fats = []; S.users = []; if (NX.proposta && NX.proposta.limpar) NX.proposta.limpar(); try { localStorage.removeItem('nx-token'); } catch (e) {}
+  S.token = null; S.user = null; S.orcs = []; S.fats = []; S.users = []; S.materiais = []; S.correcoes = []; if (NX.proposta && NX.proposta.limpar) NX.proposta.limpar(); try { localStorage.removeItem('nx-token'); } catch (e) {}
   if (!silencioso) NX.telaLogin();
   else setTimeout(NX.telaLogin, 0);
 };
@@ -151,6 +164,8 @@ function montarCasca() {
       '<div class="sect">Asana</div>' +
       '<a class="nav-a" href="' + NX.esc(asana) + '" target="_blank" rel="noopener" title="Asana da SOMMAR (vendas)">' + IC.asana + '<span class="label">Asana SOMMAR</span></a>' +
       '<button class="nav-a" disabled title="Em breve: enviar os valores do orçamento para o cliente no Asana">' + IC.sync + '<span class="label">Atualizar Asana</span><span class="soon">em breve</span></button>' +
+      '<div class="sect">Ajuda</div>' +
+      '<button class="nav-a" id="btnCorrecao" type="button" title="Anotar uma correção ou melhoria necessária no sistema">' + IC.correcao + '<span class="label">Informar correção</span>' + (NX.eDiretor() ? '<span class="soon" id="corrBadge"></span>' : '') + '</button>' +
       '</nav>' +
       '<div class="foot"><div class="avatar">' + NX.esc(iniciais(S.user.nome)) + '</div><div class="who"><b>' + NX.esc(S.user.nome) + '</b><span>' + (NX.eDiretor() ? 'Diretoria' : 'Vendedor(a)') + '</span></div>' +
       '<button class="iconbtn" id="btnSair" title="Sair">' + IC.sair + '</button></div>' +
@@ -162,6 +177,8 @@ function montarCasca() {
   NX.$('#btnMenu').onclick = function () { document.body.classList.add('menu'); };
   NX.$('#scrim').onclick = function () { document.body.classList.remove('menu'); };
   NX.$('#btnSair').onclick = function () { if (confirm('Sair da sua conta?')) NX.sair(); };
+  NX.$('#btnCorrecao').onclick = function () { document.body.classList.remove('menu'); NX.informarCorrecao(); };
+  NX.badgeCorrecoes();
   var sd = NX.$('#sairDemo'); if (sd) sd.onclick = function () { try { localStorage.removeItem('nx-demo'); localStorage.removeItem('nx-token'); } catch (e) {} location.href = location.pathname; };
 }
 NX.rotaAtual = function () { var h = (location.hash || '').replace(/^#\/?/, '').split('?')[0]; return ROTAS.some(function (r) { return r.id === h; }) ? h : 'inicio'; };
@@ -239,6 +256,35 @@ NX.telaLogin = function () {
     });
     setTimeout(function () { var i = NX.$('#fLogin input'); if (i) i.focus(); }, 50);
   }
+};
+
+/* ---------- correções informadas ---------- */
+NX.badgeCorrecoes = function () {
+  var b = NX.$('#corrBadge'); if (!b) return;
+  var n = S.correcoes.filter(function (c) { return c.status !== 'resolvida'; }).length;
+  b.textContent = n ? n + ' aberta' + (n === 1 ? '' : 's') : ''; b.hidden = !n;
+};
+NX.informarCorrecao = function () {
+  var pag = ({ inicio: 'Início', proposta: 'Proposta comercial', historico: 'Histórico', comissoes: 'Comissões', diretoria: 'Diretoria' })[NX.rotaAtual()] || '';
+  NX.modal('<div class="modal-h"><div><h2>Informar correção</h2><p>Anote algo que precisa ser corrigido ou melhorado no sistema. Fica registrado para a Diretoria.</p></div><button class="btn ghost small" data-fechar>Fechar</button></div>' +
+    '<div class="modal-b"><div class="grid"><label class="f">Onde<input type="text" id="cPag" value="' + NX.esc(pag) + '"></label>' +
+    '<label class="f">Prioridade<select id="cPri"><option value="normal">Normal</option><option value="alta">Alta (atrapalha o trabalho)</option></select></label>' +
+    '<label class="f full"><span>O que precisa ser corrigido? <span style="color:var(--danger)">*</span></span><textarea id="cTxt" rows="5" placeholder="Ex.: na proposta, o campo Versão não muda no histórico quando eu digito V02"></textarea></label></div>' +
+    '<div class="err" id="cErr" style="margin-top:8px"></div></div>' +
+    '<div class="modal-f"><button class="btn ghost" data-fechar>Cancelar</button><button class="btn primary" id="cOk" type="button" disabled>Enviar</button></div>',
+    function (m, fechar) {
+      m.style.maxWidth = '620px';
+      var t = NX.$('#cTxt', m), b = NX.$('#cOk', m);
+      setTimeout(function () { t.focus(); }, 50);
+      t.addEventListener('input', function () { b.disabled = t.value.trim().length < 5; });
+      b.onclick = function () {
+        b.disabled = true;
+        NX.api('registrarCorrecao', { texto: t.value.trim(), pagina: NX.$('#cPag', m).value, prioridade: NX.$('#cPri', m).value }).then(function (r) {
+          S.correcoes.push(r.correcao); NX.badgeCorrecoes(); fechar(); NX.toast('Correção registrada. Obrigada!');
+          if (NX.rotaAtual() === 'diretoria') NX.paginas.diretoria(NX.$('#view'));
+        }).catch(function (e) { b.disabled = false; NX.$('#cErr', m).textContent = e.message; });
+      };
+    });
 };
 
 /* ---------- dados derivados ---------- */

@@ -116,13 +116,13 @@ function corpo() {
   } else h += '<div></div>';
   h += '</div>';
   h += '<div class="card" style="padding:0;overflow:hidden"><div style="padding:16px 18px 8px"><h2 style="margin:0">Projetos faturados</h2></div>' +
-    (fats.length ? '<div class="tbl-wrap" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Faturado em</th><th>Cliente</th><th>Local</th>' + (dir ? '<th>Vendedor</th>' : '') + '<th class="right">Valor final</th><th>Pagamentos</th><th class="right">Líquido</th><th class="right">m² efetivo</th><th class="right">Comissão</th><th></th></tr></thead><tbody>' +
+    (fats.length ? '<div class="tbl-wrap" style="border:0;border-radius:0"><table class="t"><thead><tr><th>Faturado em</th><th>Cliente</th><th>Local</th>' + (dir ? '<th>Vendedor</th>' : '') + '<th class="right">Valor final</th><th>Pagamentos</th><th class="right" title="Valor final − custos fixos − taxas">Base</th><th class="right">m² efetivo</th><th class="right">Comissão</th><th></th></tr></thead><tbody>' +
       fats.map(function (f) {
         return '<tr><td class="nowrap">' + NX.dataBR(String(f.faturadoEm).slice(0, 10)) + '<div class="muted" style="font-size:12px">1º pgto ' + NX.dataBR(f.primeiroPagamento) + '</div></td>' +
           '<td><div class="cli"><b>' + esc(f.cliente || '') + '</b><span>' + esc(f.telefone || '') + '</span></div></td><td>' + esc(f.local || '—') + '</td>' + (dir ? '<td>' + esc(f.vendedor || '') + '</td>' : '') +
           '<td class="right nowrap"><b>' + brl(f.valorFinal) + '</b>' + (f.desconto > 0 ? '<div class="muted" style="font-size:12px">' + esc(f.nomeDesconto) + ' −' + brl(f.desconto) + '</div>' : '') + '</td>' +
           '<td><div class="stk">' + (f.pagamentos || []).map(function (p) { return '<span class="nowrap">' + esc(p.forma) + ' · ' + brl(p.valor) + '</span>'; }).join('') + '</div></td>' +
-          '<td class="right nowrap">' + brl(f.liquido) + '</td><td class="right nowrap">' + (f.area > 0 ? brl(f.m2Efetivo) : '—') + '</td>' +
+          '<td class="right nowrap">' + brl(f.baseComissao != null ? f.baseComissao : f.liquido) + (f.baseComissao == null ? '<div class="muted" style="font-size:11px" title="Faturado antes da regra nova. Use Alterar para recalcular.">regra antiga</div>' : '') + '</td><td class="right nowrap">' + (f.area > 0 ? brl(f.m2Efetivo) : '—') + '</td>' +
           '<td class="right nowrap"><b style="color:#126e64">' + brl(f.comissao) + '</b><div class="muted" style="font-size:12px">' + f2(f.comissaoPct) + '%</div></td>' +
           '<td><div class="acts" style="min-width:0"><button class="btn tiny ghost" data-verfat="' + f.id + '">Ver</button><button class="btn tiny ghost" data-altfat="' + f.id + '">Alterar</button><button class="btn tiny danger" data-delfat="' + f.id + '">Excluir</button></div>' + ((f.historico || []).length ? '<div class="muted" style="font-size:11px;margin-top:4px">alterado ' + f.historico.length + 'x</div>' : '') + '</td></tr>';
       }).join('') + '</tbody></table></div>' : '<div class="empty">Nenhum projeto faturado' + (S.fats.length ? ' com esses filtros.' : ' ainda. Fature pelo Histórico de orçamentos.') + '</div>') + '</div>';

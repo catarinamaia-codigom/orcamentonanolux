@@ -133,14 +133,20 @@ var NX_CALC = (function () {
     var liquido = r2(t.final - taxas);
     var fixos = r2((cfg.descontarForaArea !== false ? t.foraArea : 0) + num(cfg.custoFixo));
     var m2ef = t.area > 0 ? r2((t.final - fixos - taxas) / t.area) : 0;
-    var comissao = 0;
-    pays.forEach(function (p) { p.comissaoPct = pctComissao(cfg, p.data || d.emissao); p.comissao = r2((p.valor - p.taxa) * p.comissaoPct / 100); comissao += p.comissao; });
+    /* comissão = (valor total − custos fixos − desconto − taxas) × %; os custos fixos são rateados entre os pagamentos */
+    var base = r2(t.final - fixos - taxas), comissao = 0, ref = somaPag > 0 ? somaPag : t.final;
+    pays.forEach(function (p) {
+      p.comissaoPct = pctComissao(cfg, p.data || d.emissao);
+      p.fixo = ref > 0 ? r2(fixos * p.valor / ref) : 0;
+      p.base = r2(p.valor - p.taxa - p.fixo);
+      p.comissao = r2(Math.max(0, p.base) * p.comissaoPct / 100); comissao += p.comissao;
+    });
     comissao = r2(comissao);
     var pcts = pays.map(function (p) { return p.comissaoPct; }).filter(function (v, i, l) { return l.indexOf(v) === i; });
-    var pct = pcts.length === 1 ? pcts[0] : (liquido > 0 ? r2(comissao / liquido * 100) : 0);
+    var pct = pcts.length === 1 ? pcts[0] : (base > 0 ? r2(comissao / base * 100) : 0);
     return {
       total: t.total, area: t.area, foraArea: t.foraArea, desc: t.desc, nomeDesc: t.nomeDesc, final: t.final, ref: t.ref, valorM2: t.valorM2,
-      pagamentos: pays, somaPag: somaPag, taxas: taxas, liquido: liquido, fixos: fixos, m2ef: m2ef, comissaoPct: pct, comissao: comissao,
+      pagamentos: pays, somaPag: somaPag, taxas: taxas, liquido: liquido, fixos: fixos, baseComissao: base, m2ef: m2ef, comissaoPct: pct, comissao: comissao,
       precisaAutorizacao: t.area > 0 && t.ref > 0 && m2ef < t.ref - 0.004
     };
   }
@@ -161,6 +167,13 @@ var NX_CALC = (function () {
       if (!String(d.descNome || '').trim()) d.descNome = 'Desconto';
     }
     return d;
+  }
+  /* "Cartão em até 3 vezes sem juros" → "Cartão 3x"; "PIX à vista" → "PIX" */
+  function formaDoTexto(txt) {
+    var t = String(txt || '').toLowerCase();
+    if (/cart/.test(t)) { var m = /(\d{1,2})\s*(x|vezes|parcela)/.exec(t), n = m ? Math.min(12, Math.max(1, +m[1])) : 1; return 'Cartão ' + n + 'x'; }
+    if (/pix|vista|transfer|dinheiro|boleto/.test(t)) return /boleto/.test(t) ? 'Boleto' : /transfer/.test(t) ? 'Transferência' : /dinheiro/.test(t) ? 'Dinheiro' : 'PIX';
+    return '';
   }
   function ym(iso) { return String(iso || '').slice(0, 7); }
   function somaMes(ymStr, n) {
@@ -185,7 +198,7 @@ var NX_CALC = (function () {
     });
     return out;
   }
-  return { FORMAS: FORMAS, CONFIG_PADRAO: CONFIG_PADRAO, num: num, r2: r2, f2s: f2s, hojeISO: hojeISO, mesclar: mesclar, tabelaEm: tabelaEm, taxa: taxa, pctComissao: pctComissao, totais: totais, analise: analise, agenda: agenda, temAjustes: temAjustes, aplicarAjustes: aplicarAjustes, ym: ym, somaMes: somaMes, parcelas: parcelas, eCartao: eCartao };
+  return { FORMAS: FORMAS, CONFIG_PADRAO: CONFIG_PADRAO, num: num, r2: r2, f2s: f2s, hojeISO: hojeISO, mesclar: mesclar, tabelaEm: tabelaEm, taxa: taxa, pctComissao: pctComissao, totais: totais, analise: analise, agenda: agenda, temAjustes: temAjustes, aplicarAjustes: aplicarAjustes, formaDoTexto: formaDoTexto, ym: ym, somaMes: somaMes, parcelas: parcelas, eCartao: eCartao };
 })();
 
 /* ===================== SERVIDOR ===================== */
@@ -193,7 +206,9 @@ var NX_ABAS = {
   Usuarios: ['id', 'nome', 'papel', 'ativo', 'criadoEm', 'json'],
   Orcamentos: ['id', 'grupo', 'versao', 'numero', 'vendedor', 'cliente', 'telefone', 'local', 'status', 'emissao', 'validade', 'total', 'desconto', 'valorFinal', 'area', 'm2Efetivo', 'atualizadoEm', 'json'],
   Faturamentos: ['id', 'orcamento', 'numero', 'vendedor', 'cliente', 'telefone', 'valorFinal', 'comissao', 'primeiroPagamento', 'faturadoEm', 'json'],
-  Config: ['chave', 'json']
+  Config: ['chave', 'json'],
+  Materiais: ['id', 'nome', 'tipo', 'ativo', 'tamanho', 'arquivo', 'criadoEm', 'json'],
+  Correcoes: ['id', 'em', 'por', 'pagina', 'status', 'texto', 'json']
 };
 
 function doGet() {
@@ -222,6 +237,12 @@ function nxRotear(req) {
   if (a === 'vincularAsana') return nxComTrava(function () { return nxVincularAsana(u, req); });
   if (a === 'alterarFaturamento') return nxComTrava(function () { return nxAlterarFaturamento(u, req); });
   if (a === 'excluirFaturamento') return nxComTrava(function () { return nxExcluirFaturamento(u, req); });
+  if (a === 'excluirOrcamento') return nxComTrava(function () { return nxExcluirOrcamento(u, req); });
+  if (a === 'registrarCorrecao') return nxComTrava(function () { return nxRegistrarCorrecao(u, req); });
+  if (a === 'atualizarCorrecao') { nxExigirDiretor(u); return nxComTrava(function () { return nxAtualizarCorrecao(u, req); }); }
+  if (a === 'baixarMaterial') return nxBaixarMaterial(req);
+  if (a === 'enviarMaterial') { nxExigirDiretor(u); return nxComTrava(function () { return nxEnviarMaterial(u, req); }); }
+  if (a === 'salvarMaterial') { nxExigirDiretor(u); return nxComTrava(function () { return nxSalvarMaterial(req); }); }
   if (a === 'salvarConfig') { nxExigirDiretor(u); return nxComTrava(function () { return nxSalvarConfig(req.config); }); }
   if (a === 'salvarUsuario') { nxExigirDiretor(u); return nxComTrava(function () { return nxSalvarUsuario(req.usuario); }); }
   throw new Error('Ação desconhecida: ' + a);
@@ -325,10 +346,12 @@ function nxConfig() {
 }
 function nxCarregar(u) {
   var dir = u.papel === 'diretor';
-  var orcs = nxLer('Orcamentos').filter(function (o) { return dir || o.vendedorId === u.id; });
+  var orcs = nxLer('Orcamentos').filter(function (o) { return !o.excluido && (dir || o.vendedorId === u.id); });
   var fats = nxLer('Faturamentos').filter(function (f) { return !f.excluido && (dir || f.vendedorId === u.id); });
   var usuarios = dir ? nxLer('Usuarios').map(nxPublico) : [nxPublico(u)];
-  return { ok: true, usuario: nxPublico(u), config: nxConfig(), orcamentos: orcs, faturamentos: fats, usuarios: usuarios, agora: new Date().toISOString() };
+  var materiais = nxLer('Materiais').filter(function (m) { return !m.removido && (dir || m.ativo !== false); }).sort(function (a, b) { return (a.ordem || 0) - (b.ordem || 0); });
+  var correcoes = nxLer('Correcoes').filter(function (c) { return dir || c.porId === u.id; });
+  return { ok: true, usuario: nxPublico(u), config: nxConfig(), orcamentos: orcs, faturamentos: fats, usuarios: usuarios, materiais: materiais, correcoes: correcoes, agora: new Date().toISOString() };
 }
 function nxResumo(o, cfg) {
   var d = o.dados || {}, a = NX_CALC.analise(d, cfg);
@@ -381,7 +404,7 @@ function nxFaturar(u, req) {
     id: Utilities.getUuid(), orcamentoId: o.id, grupo: o.grupo, orcamento: o.id, numero: o.numero, versao: o.versao, vendedorId: o.vendedorId, vendedor: o.vendedor,
     cliente: o.cliente, telefone: o.telefone, local: o.local, projeto: o.projeto, orcCriadoEm: (todos.filter(function (x) { return x.grupo === o.grupo; }).map(function (x) { return x.criadoEm; }).sort()[0] || o.criadoEm),
     total: a.total, desconto: a.desc, nomeDesconto: a.nomeDesc, valorFinal: a.final, area: a.area, valorM2: a.valorM2, m2Efetivo: a.m2ef, ref: a.ref,
-    taxas: a.taxas, liquido: a.liquido, comissaoPct: a.comissaoPct, comissao: a.comissao, pagamentos: a.pagamentos,
+    taxas: a.taxas, liquido: a.liquido, fixos: a.fixos, baseComissao: a.baseComissao, comissaoPct: a.comissaoPct, comissao: a.comissao, pagamentos: a.pagamentos,
     agenda: NX_CALC.agenda(a.pagamentos, cfg), modoParcelado: cfg.modoParcelado, primeiroPagamento: datas[0], faturadoEm: agora, faturadoPor: u.nome, obs: String(req.obs || ''),
     ajustes: aj ? [aj] : []
   };
@@ -442,16 +465,16 @@ function nxAlterarFaturamento(u, req) {
   var pags = nxPagamentosValidos(req.pagamentos), aj = nxAjustes(req.ajustes, u);
   var dados = aj ? NX_CALC.aplicarAjustes(o.dados, aj, cfg) : o.dados, a = NX_CALC.analise(dados, cfg, pags);
   if (Math.abs(a.somaPag - a.final) > 0.009) throw new Error('A soma dos pagamentos (' + a.somaPag.toFixed(2) + ') precisa ser igual ao valor final (' + a.final.toFixed(2) + ').');
-  var antes = { pagamentos: f.pagamentos, taxas: f.taxas, liquido: f.liquido, comissao: f.comissao, comissaoPct: f.comissaoPct, m2Efetivo: f.m2Efetivo, obs: f.obs, valorFinal: f.valorFinal, area: f.area, desconto: f.desconto };
+  var antes = { pagamentos: f.pagamentos, taxas: f.taxas, liquido: f.liquido, baseComissao: f.baseComissao, comissao: f.comissao, comissaoPct: f.comissaoPct, m2Efetivo: f.m2Efetivo, obs: f.obs, valorFinal: f.valorFinal, area: f.area, desconto: f.desconto };
   var datas = a.pagamentos.map(function (p) { return p.data; }).sort();
   f.total = a.total; f.desconto = a.desc; f.nomeDesconto = a.nomeDesc; f.valorFinal = a.final; f.area = a.area; f.valorM2 = a.valorM2; f.ref = a.ref;
-  f.pagamentos = a.pagamentos; f.taxas = a.taxas; f.liquido = a.liquido; f.comissaoPct = a.comissaoPct; f.comissao = a.comissao; f.m2Efetivo = a.m2ef;
+  f.pagamentos = a.pagamentos; f.taxas = a.taxas; f.liquido = a.liquido; f.fixos = a.fixos; f.baseComissao = a.baseComissao; f.comissaoPct = a.comissaoPct; f.comissao = a.comissao; f.m2Efetivo = a.m2ef;
   if (aj) { f.ajustes = f.ajustes || []; f.ajustes.push(aj); }
   f.agenda = NX_CALC.agenda(a.pagamentos, cfg); f.modoParcelado = cfg.modoParcelado; f.primeiroPagamento = datas[0];
   if (req.obs != null) f.obs = String(req.obs);
   f.historico = f.historico || [];
   f.historico.push({ em: new Date().toISOString(), por: u.nome, porId: u.id, motivo: motivo, antes: antes, ajuste: aj || null,
-    depois: { pagamentos: f.pagamentos, taxas: f.taxas, liquido: f.liquido, comissao: f.comissao, comissaoPct: f.comissaoPct, m2Efetivo: f.m2Efetivo, obs: f.obs, valorFinal: f.valorFinal, area: f.area, desconto: f.desconto } });
+    depois: { pagamentos: f.pagamentos, taxas: f.taxas, liquido: f.liquido, baseComissao: f.baseComissao, comissao: f.comissao, comissaoPct: f.comissaoPct, m2Efetivo: f.m2Efetivo, obs: f.obs, valorFinal: f.valorFinal, area: f.area, desconto: f.desconto } });
   f.alteradoEm = new Date().toISOString();
   nxGravar('Faturamentos', f);
   nxAtualizarOrcDoFaturamento(o, dados, a, aj, cfg, u, 'Faturamento alterado: ' + motivo);
@@ -491,4 +514,75 @@ function nxExcluirFaturamento(u, req) {
     nxGravar('Orcamentos', o);
   }
   return { ok: true, faturamentoId: f.id, orcamento: o || null };
+}
+
+/* ---------- excluir orçamento (ex.: propostas repetidas) ---------- */
+function nxExcluirOrcamento(u, req) {
+  var todos = nxLer('Orcamentos'), o = todos.filter(function (x) { return x.id === req.id && !x.excluido; })[0];
+  if (!o || (u.papel !== 'diretor' && o.vendedorId !== u.id)) throw new Error('Orçamento não encontrado.');
+  if (o.status === 'faturado') throw new Error('Este orçamento está faturado. Exclua o faturamento primeiro.');
+  var agora = new Date().toISOString(), alterados = [];
+  o.excluido = true; o.excluidoEm = agora; o.excluidoPor = u.nome; o.motivoExclusao = String(req.motivo || '').trim();
+  nxGravar('Orcamentos', o); alterados.push(o);
+  /* se ele tinha substituído versões anteriores, a anterior volta a valer */
+  todos.forEach(function (x) { if (!x.excluido && x.substituidoPor === o.id) { x.substituidoPor = ''; x.substituidoEm = ''; nxGravar('Orcamentos', x); alterados.push(x); } });
+  return { ok: true, orcamentos: alterados };
+}
+/* ---------- correções informadas pelos usuários ---------- */
+function nxRegistrarCorrecao(u, req) {
+  var texto = String(req.texto || '').trim();
+  if (texto.length < 5) throw new Error('Descreva a correção.');
+  var c = { id: Utilities.getUuid(), em: new Date().toISOString(), por: u.nome, porId: u.id, pagina: String(req.pagina || ''), status: 'aberta', texto: texto.slice(0, 4000), prioridade: req.prioridade === 'alta' ? 'alta' : 'normal' };
+  nxGravar('Correcoes', c);
+  return { ok: true, correcao: c };
+}
+function nxAtualizarCorrecao(u, req) {
+  var c = nxLer('Correcoes').filter(function (x) { return x.id === req.id; })[0];
+  if (!c) throw new Error('Correção não encontrada.');
+  c.status = req.status === 'resolvida' ? 'resolvida' : 'aberta';
+  c.resposta = String(req.resposta || c.resposta || '');
+  c.resolvidoEm = c.status === 'resolvida' ? new Date().toISOString() : ''; c.resolvidoPor = c.status === 'resolvida' ? u.nome : '';
+  nxGravar('Correcoes', c);
+  return { ok: true, correcao: c };
+}
+/* ---------- biblioteca de PDFs (capas e materiais), guardados no Google Drive ---------- */
+function nxPastaMateriais() {
+  var p = PropertiesService.getScriptProperties(), id = p.getProperty('NX_PASTA_MATERIAIS');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
+  var pasta = DriveApp.createFolder('Nanolux · Materiais em PDF');
+  p.setProperty('NX_PASTA_MATERIAIS', pasta.getId());
+  return pasta;
+}
+function nxEnviarMaterial(u, req) {
+  var nome = String(req.nome || '').trim() || 'Material', tipo = req.tipo === 'capa' ? 'capa' : 'material';
+  if (!req.base64) throw new Error('Arquivo vazio.');
+  var bytes = Utilities.base64Decode(req.base64);
+  if (bytes.length < 5 || String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== '%PDF') throw new Error('O arquivo precisa ser um PDF.');
+  var arq = nxPastaMateriais().createFile(Utilities.newBlob(bytes, 'application/pdf', nome.replace(/[\\\/:*?"<>|]+/g, '-') + '.pdf'));
+  var lista = nxLer('Materiais').filter(function (m) { return !m.removido; });
+  var m = { id: Utilities.getUuid(), nome: nome, tipo: tipo, ativo: true, tamanho: bytes.length, arquivo: arq.getId(), paginas: NX_CALC.num(req.paginas) || 0,
+            ordem: lista.length ? Math.max.apply(null, lista.map(function (x) { return x.ordem || 0; })) + 1 : 1, criadoEm: new Date().toISOString(), por: u.nome };
+  nxGravar('Materiais', m);
+  return { ok: true, material: m };
+}
+function nxSalvarMaterial(req) {
+  var todos = nxLer('Materiais'), m = todos.filter(function (x) { return x.id === req.id; })[0];
+  if (!m) throw new Error('Material não encontrado.');
+  if (req.remover) {
+    m.removido = true; m.ativo = false;
+    try { DriveApp.getFileById(m.arquivo).setTrashed(true); } catch (e) {}
+  } else {
+    if (req.nome != null) m.nome = String(req.nome).trim() || m.nome;
+    if (req.tipo) m.tipo = req.tipo === 'capa' ? 'capa' : 'material';
+    if (req.ativo != null) m.ativo = !!req.ativo;
+    if (req.ordem != null) m.ordem = NX_CALC.num(req.ordem);
+  }
+  nxGravar('Materiais', m);
+  return { ok: true, material: m };
+}
+function nxBaixarMaterial(req) {
+  var m = nxLer('Materiais').filter(function (x) { return x.id === req.id && !x.removido; })[0];
+  if (!m) throw new Error('Material não encontrado.');
+  var bytes = DriveApp.getFileById(m.arquivo).getBlob().getBytes();
+  return { ok: true, id: m.id, nome: m.nome, base64: Utilities.base64Encode(bytes) };
 }

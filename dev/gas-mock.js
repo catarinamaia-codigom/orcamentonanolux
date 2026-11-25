@@ -83,7 +83,20 @@
     computeHmacSha256Signature: function (v, k) { return hmac(v, k); },
     base64EncodeWebSafe: b64ws,
     base64DecodeWebSafe: b64wsDecode,
-    newBlob: function (bytes) { return { getDataAsString: function () { return new TextDecoder().decode(new Uint8Array(bytes)); } }; }
+    newBlob: function (bytes, mime, nome) { return { bytes: bytes, mime: mime, nome: nome, getBytes: function () { return bytes; }, getDataAsString: function () { return new TextDecoder().decode(new Uint8Array(bytes.map(function (b) { return b & 0xff; }))); } }; },
+    base64Decode: function (s) { return b64wsDecode(String(s).replace(/\+/g, '-').replace(/\//g, '_')).map(function (b) { return b > 127 ? b - 256 : b; }); },
+    base64Encode: function (bytes) { var s = ''; for (var i = 0; i < bytes.length; i += 8192) s += String.fromCharCode.apply(null, bytes.slice(i, i + 8192).map(function (b) { return b & 0xff; })); return btoa(s); }
+  };
+  /* Drive simulado: arquivos ficam só na memória desta aba */
+  var arquivos = {};
+  function Arquivo(id) { this.id = id; }
+  Arquivo.prototype.getId = function () { return this.id; };
+  Arquivo.prototype.getBlob = function () { var a = arquivos[this.id]; return { getBytes: function () { return a.bytes; } }; };
+  Arquivo.prototype.setTrashed = function () { delete arquivos[this.id]; };
+  var pasta = { getId: function () { return 'pasta-demo'; }, createFile: function (blob) { var id = 'arq-' + Math.random().toString(36).slice(2); arquivos[id] = { bytes: blob.getBytes(), nome: blob.nome }; return new Arquivo(id); } };
+  g.DriveApp = {
+    createFolder: function () { return pasta; }, getFolderById: function () { return pasta; },
+    getFileById: function (id) { if (!arquivos[id]) throw new Error('Arquivo não está mais nesta sessão de demonstração.'); return new Arquivo(id); }
   };
   g.ContentService = {
     MimeType: { JSON: 'JSON' },

@@ -13,14 +13,14 @@ NX.paginas.diretoria = function (view) {
     '<div class="dir-grid"><div style="display:flex;flex-direction:column;gap:16px">' +
       '<div class="card"><h2>Comissão</h2><div class="grid">' +
         '<div class="f full">Cartão parcelado<select id="dModo"><option value="integral">Comissão integral (mês seguinte à 1ª parcela)</option><option value="parcelas">Dividida pelos meses das parcelas</option></select></div>' +
-        '<p class="muted full" style="margin:0;font-size:12.5px">A comissão é calculada pelas <b>datas inseridas em cada pagamento</b> do faturamento: a data define qual tabela de vigência vale (% de comissão e taxas da máquina) e o mês de recebimento. A comissão é paga no mês seguinte ao recebimento. Valor líquido = valor do pagamento − taxa da máquina daquela forma. A % de comissão fica em cada tabela de vigência abaixo.</p></div></div>' +
+        '<p class="muted full" style="margin:0;font-size:12.5px">A comissão é calculada pelas <b>datas inseridas em cada pagamento</b> do faturamento: a data define qual tabela de vigência vale (% de comissão e taxas da máquina) e o mês de recebimento. A comissão é paga no mês seguinte ao recebimento. Base da comissão = valor do pagamento − taxa daquela forma − custos fixos (VT01 e itens fora da área, rateados entre os pagamentos). Comissão = base × %. A % de comissão fica em cada tabela de vigência abaixo.</p></div></div>' +
       '<div class="card"><h2>Comissão e taxas da máquina por vigência</h2><p class="muted" style="margin:-6px 0 12px;font-size:12.5px">As taxas incidem sobre o valor pago em cada forma (ex.: 50% no PIX e 50% em 12x → a taxa de 12x incide só sobre os 50%). Cada tabela vale <b>a partir da data</b> indicada até a véspera da próxima. Orçamentos usam a tabela da data de emissão; faturamentos usam a da <b>data de cada pagamento</b>. Assim, mudar taxas ou comissão não altera o que já foi feito.</p>' +
         '<div id="dTabs"></div><button class="btn add small" id="dTabAdd" type="button" style="margin-top:10px">+ Nova tabela de taxas (com data de início)</button></div>' +
       '<div class="card"><h2>Custos e m² efetivo</h2><div class="grid">' +
         '<label class="f">Custo fixo por projeto (R$)<input type="text" inputmode="decimal" id="dFixo"></label>' +
         '<label class="f">Validade padrão do orçamento (dias)<input type="number" min="1" id="dVal"></label>' +
         '<label class="chk full"><input type="checkbox" id="dFora"> Descontar os itens que não somam área (ex.: Protocolo técnico) como custo fixo</label>' +
-        '<p class="muted full" style="margin:0;font-size:12.5px">m² efetivo = (valor final − custos fixos − taxas) ÷ área. Abaixo da referência do produto, o vendedor vê o aviso de que precisa de autorização.</p></div></div>' +
+        '<p class="muted full" style="margin:0;font-size:12.5px">m² efetivo = (valor total − custos fixos − desconto − taxas) ÷ área. Abaixo da referência do produto, o vendedor vê o aviso de que precisa de autorização.</p></div></div>' +
       '<div class="card"><h2>Links</h2><div class="grid">' +
         '<label class="f full">Asana da SOMMAR (botão do menu)<input type="url" id="dAsana" placeholder="https://app.asana.com/…"></label>' +
         '<label class="f full">WhatsApp do botão “negociar” no PDF <span class="hint">(só números, com DDI)</span><input type="text" inputmode="numeric" id="dWa"></label></div></div>' +
@@ -39,6 +39,13 @@ NX.paginas.diretoria = function (view) {
       '</div></div>' +
     '</div><div style="display:flex;flex-direction:column;gap:16px">' +
       '<div class="card"><h2>Catálogo de produtos</h2><p class="muted" style="margin:-6px 0 12px;font-size:12.5px">Aparece na lista de itens da proposta. “Ref. m²” é o valor mínimo do m² efetivo sem autorização.</p><div id="dProd"></div><button class="btn add small" id="dProdAdd" type="button" style="margin-top:10px">+ Produto</button></div>' +
+      '<div class="card"><h2>Materiais em PDF</h2>' +
+        '<p class="muted" style="margin:-6px 0 12px;font-size:12.5px">Os arquivos ficam numa pasta do seu Google Drive (“Nanolux · Materiais em PDF”). Na proposta, o vendedor escolhe a capa e marca os materiais; eles entram antes do orçamento, nesta ordem.</p>' +
+        '<div class="up-box"><div class="grid"><label class="f">Tipo<select id="mTipo"><option value="material">Material</option><option value="capa">Capa</option></select></label>' +
+        '<label class="f">Arquivos PDF<input type="file" id="mArq" accept="application/pdf,.pdf" multiple></label></div>' +
+        '<div class="inline" style="justify-content:space-between;margin-top:10px"><span class="muted" id="mMsg" style="font-size:12.5px">Até ~25 MB por arquivo.</span><button class="btn dark small" id="mEnviar" type="button" disabled>Enviar</button></div></div>' +
+        '<div id="dMats" style="margin-top:12px"></div></div>' +
+      '<div class="card"><h2>Correções informadas <span class="opt" id="dCorrN"></span></h2><div id="dCorr"></div></div>' +
       '<div class="card"><h2>Usuários</h2><div id="dUsers"></div>' +
         '<div class="cbox" style="margin-top:12px"><h3 id="uTit">Novo usuário</h3><div class="grid"><input type="hidden" id="uId">' +
           '<label class="f">Nome<input type="text" id="uNome"></label><label class="f">Papel<select id="uPapel"><option value="vendedor">Vendedor(a)</option><option value="diretor">Diretoria</option></select></label>' +
@@ -71,7 +78,22 @@ NX.paginas.diretoria = function (view) {
     if (confirm('Remover esta tabela de taxas? Orçamentos e faturamentos já salvos não mudam; novos cálculos dessas datas passam a usar a tabela anterior.')) { tabelas.splice(+b.dataset.tdel, 1); desenharTabelas(); }
   });
   $('#dTabs').addEventListener('change', function (e) { if (e.target.dataset.tdesde != null) { lerTabelas(); desenharTabelas(); } });
-  produtos(); usuarios();
+  produtos(); usuarios(); materiais(); correcoes();
+  $('#mArq').onchange = function () { $('#mEnviar').disabled = !this.files.length; $('#mMsg').textContent = this.files.length ? this.files.length + ' arquivo(s) selecionado(s)' : 'Até ~25 MB por arquivo.'; };
+  $('#mEnviar').onclick = enviarMateriais;
+  $('#dMats').addEventListener('click', acaoMaterial);
+  $('#dMats').addEventListener('change', function (e) {
+    var row = e.target.closest('[data-mid]'); if (!row) return;
+    var id = row.dataset.mid, k = e.target.dataset.mk, v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+    var dados = { id: id }; dados[k] = v;
+    NX.api('salvarMaterial', dados).then(function (r) { trocarMat(r.material); NX.toast('Material atualizado'); }).catch(function (er) { NX.toast(er.message, true); materiais(); });
+  });
+  $('#dCorr').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-cid]'); if (!b) return; b.disabled = true;
+    NX.api('atualizarCorrecao', { id: b.dataset.cid, status: b.dataset.st }).then(function (r) {
+      var i = S.correcoes.findIndex(function (x) { return x.id === r.correcao.id; }); S.correcoes[i] = r.correcao; correcoes(); NX.badgeCorrecoes();
+    }).catch(function (er) { b.disabled = false; NX.toast(er.message, true); });
+  });
   $('#dProdAdd').onclick = function () { lerProdutos(); var k = 'novo-' + Math.random().toString(36).slice(2, 6); cfg.produtos[k] = { rotulo: 'Novo produto', nome: 'Novo produto', desc: '', unidade: 'un', valor: 0, ref: 0, contaArea: false }; produtos(); };
   $('#dProd').addEventListener('click', function (e) { var b = e.target.closest('[data-pdel]'); if (!b) return; lerProdutos(); if (Object.keys(cfg.produtos).length <= 1) return NX.toast('Mantenha pelo menos um produto.', true); if (confirm('Remover este produto do catálogo? Orçamentos já salvos não mudam.')) { delete cfg.produtos[b.dataset.pdel]; produtos(); } });
   $('#dSalvar').onclick = salvarCfg;
@@ -93,7 +115,7 @@ function desenharTabelas() {
     var aberto = x === vigente || x.t.desde > hoje || x.t.nova;
     return '<details class="taxtab"' + (aberto ? ' open' : '') + ' data-ti="' + x.i + '"><summary><span class="tt-per">' + periodo + '</span>' + st + '</summary>' +
       '<div class="tt-head"><label class="f">Vale a partir de<input type="date" data-tdesde="' + x.i + '" value="' + (x.t.desde <= '2000-01-01' ? '' : esc(x.t.desde)) + '"' + (x.t.desde <= '2000-01-01' ? ' placeholder="desde o início"' : '') + '></label>' +
-      '<label class="f">Comissão sobre o líquido (%)<input type="text" inputmode="decimal" data-tpct="' + x.i + '" value="' + f2(num(x.t.comissaoPct)) + '"></label>' +
+      '<label class="f">Comissão sobre a base (%)<input type="text" inputmode="decimal" data-tpct="' + x.i + '" value="' + f2(num(x.t.comissaoPct)) + '"></label>' +
       '<button class="btn tiny danger" type="button" data-tdel="' + x.i + '">Remover tabela</button></div>' +
       '<div class="taxgrid">' + C.FORMAS.map(function (f) { return '<label class="f">' + esc(f) + '<input type="text" inputmode="decimal" data-tx="' + esc(f) + '" value="' + f2(num(x.t.taxas[f])) + '"></label>'; }).join('') + '</div></details>';
   }).join('');
@@ -147,6 +169,71 @@ function salvarCfg() {
   NX.api('salvarConfig', { config: cfg }).then(function (r) {
     S.cfg = C.mesclar(r.config); b.disabled = false; $('#dMsg').textContent = 'Salvo às ' + new Date().toTimeString().slice(0, 5) + '.'; NX.toast('Configurações salvas');
   }).catch(function (e) { b.disabled = false; $('#dMsg').textContent = ''; NX.toast(e.message, true); });
+}
+/* ---------- materiais em PDF ---------- */
+function tamTxt(b) { return b > 1048576 ? NX.f2(b / 1048576) + ' MB' : Math.max(1, Math.round((b || 0) / 1024)) + ' KB'; }
+function trocarMat(m) { var i = S.materiais.findIndex(function (x) { return x.id === m.id; }); if (m.removido) { if (i >= 0) S.materiais.splice(i, 1); } else if (i >= 0) S.materiais[i] = m; else S.materiais.push(m); S.materiais.sort(function (a, b) { return (a.ordem || 0) - (b.ordem || 0); }); materiais(); }
+function materiais() {
+  var ms = S.materiais.slice().sort(function (a, b) { return (a.ordem || 0) - (b.ordem || 0); });
+  $('#dMats').innerHTML = ms.length ? ms.map(function (m, i) {
+    return '<div class="mat-row' + (m.ativo === false ? ' off' : '') + '" data-mid="' + esc(m.id) + '"><span class="tag ' + (m.tipo === 'capa' ? 'faturado' : 'valido') + '">' + (m.tipo === 'capa' ? 'Capa' : 'Material') + '</span>' +
+      '<input type="text" data-mk="nome" value="' + esc(m.nome) + '" title="Nome que aparece na proposta">' +
+      '<small class="muted nowrap">' + (m.paginas ? m.paginas + ' pág. · ' : '') + tamTxt(m.tamanho) + '</small>' +
+      '<label class="chk" title="Disponível para os vendedores"><input type="checkbox" data-mk="ativo"' + (m.ativo !== false ? ' checked' : '') + '> ativo</label>' +
+      '<button class="ibtn" type="button" data-ma="up"' + (i === 0 ? ' disabled' : '') + ' title="Subir">↑</button><button class="ibtn" type="button" data-ma="down"' + (i === ms.length - 1 ? ' disabled' : '') + ' title="Descer">↓</button>' +
+      '<button class="btn tiny ghost" type="button" data-ma="ver">Ver</button><button class="ibtn del" type="button" data-ma="del" title="Remover da biblioteca">✕</button></div>';
+  }).join('') : '<p class="muted" style="margin:0">Nenhum PDF enviado ainda.</p>';
+}
+function acaoMaterial(e) {
+  var b = e.target.closest('[data-ma]'); if (!b) return;
+  var row = b.closest('[data-mid]'), id = row.dataset.mid, a = b.dataset.ma, ms = S.materiais.slice().sort(function (x, y) { return (x.ordem || 0) - (y.ordem || 0); }), i = ms.findIndex(function (x) { return x.id === id; });
+  if (a === 'up' || a === 'down') {
+    var j = a === 'up' ? i - 1 : i + 1; if (j < 0 || j >= ms.length) return;
+    var oi = ms[i].ordem || i + 1, oj = ms[j].ordem || j + 1; if (oi === oj) { oi = i + 1; oj = j + 1; }
+    b.disabled = true;
+    Promise.all([NX.api('salvarMaterial', { id: ms[i].id, ordem: oj }), NX.api('salvarMaterial', { id: ms[j].id, ordem: oi })]).then(function (rs) { rs.forEach(function (r) { trocarMat(r.material); }); }).catch(function (er) { NX.toast(er.message, true); materiais(); });
+  } else if (a === 'del') {
+    if (!confirm('Remover “' + ms[i].nome + '” da biblioteca? O arquivo vai para a lixeira do Google Drive.')) return;
+    NX.api('salvarMaterial', { id: id, remover: true }).then(function (r) { trocarMat(r.material); NX.toast('Material removido'); }).catch(function (er) { NX.toast(er.message, true); });
+  } else if (a === 'ver') {
+    b.disabled = true; b.textContent = 'Abrindo…';
+    NX.api('baixarMaterial', { id: id }).then(function (r) {
+      var bin = atob(r.base64), u8 = new Uint8Array(bin.length); for (var k = 0; k < bin.length; k++) u8[k] = bin.charCodeAt(k);
+      NX.baixarArquivo(u8, r.nome + '.pdf', 'application/pdf'); b.disabled = false; b.textContent = 'Ver';
+    }).catch(function (er) { b.disabled = false; b.textContent = 'Ver'; NX.toast(er.message, true); });
+  }
+}
+function lerArquivo(f) { return new Promise(function (ok, erro) { var r = new FileReader(); r.onload = function () { ok(new Uint8Array(r.result)); }; r.onerror = function () { erro(new Error('Não foi possível ler ' + f.name)); }; r.readAsArrayBuffer(f); }); }
+function paraB64(u8) { var s = ''; for (var i = 0; i < u8.length; i += 32768) s += String.fromCharCode.apply(null, u8.subarray(i, i + 32768)); return btoa(s); }
+async function enviarMateriais() {
+  var arqs = Array.prototype.slice.call($('#mArq').files), tipo = $('#mTipo').value, b = $('#mEnviar'), msg = $('#mMsg');
+  if (!arqs.length) return;
+  b.disabled = true;
+  var lib = null; try { await NX.carregarScript('lib/pdf-lib.min.js?v=1.17.1'); lib = window.PDFLib; } catch (e) {}
+  for (var i = 0; i < arqs.length; i++) {
+    var f = arqs[i];
+    msg.textContent = 'Enviando ' + (i + 1) + ' de ' + arqs.length + ': ' + f.name + '…';
+    try {
+      if (f.size > 26 * 1048576) throw new Error(f.name + ' passa de 25 MB. Comprima o PDF e tente de novo.');
+      var u8 = await lerArquivo(f), pags = 0;
+      if (String.fromCharCode(u8[0], u8[1], u8[2], u8[3]) !== '%PDF') throw new Error(f.name + ' não é um PDF.');
+      if (lib) { try { pags = (await lib.PDFDocument.load(u8, { ignoreEncryption: true })).getPageCount(); } catch (e) {} }
+      var r = await NX.api('enviarMaterial', { nome: f.name.replace(/\.pdf$/i, '').replace(/_+/g, ' ').trim(), tipo: tipo, base64: paraB64(u8), paginas: pags });
+      trocarMat(r.material);
+    } catch (er) { NX.toast(er.message, true); }
+  }
+  msg.textContent = 'Pronto. Até ~25 MB por arquivo.'; $('#mArq').value = ''; b.disabled = true;
+}
+/* ---------- correções informadas ---------- */
+function correcoes() {
+  var cs = S.correcoes.slice().sort(function (a, b) { return (a.status === 'resolvida') - (b.status === 'resolvida') || (b.prioridade === 'alta') - (a.prioridade === 'alta') || String(b.em).localeCompare(String(a.em)); });
+  var abertas = cs.filter(function (c) { return c.status !== 'resolvida'; }).length;
+  $('#dCorrN').textContent = abertas ? abertas + ' aberta' + (abertas === 1 ? '' : 's') : '';
+  $('#dCorr').innerHTML = cs.length ? cs.slice(0, 40).map(function (c) {
+    var ok = c.status === 'resolvida';
+    return '<div class="corr' + (ok ? ' ok' : '') + '"><div class="hd"><b>' + NX.dataBR(String(c.em).slice(0, 10)) + '</b> · ' + esc(c.por || '') + (c.pagina ? ' · ' + esc(c.pagina) : '') + (c.prioridade === 'alta' && !ok ? ' <span class="tag vencido">alta</span>' : '') + (ok ? ' <span class="tag ok">resolvida</span>' : '') + '</div>' +
+      '<div class="tx">' + esc(c.texto) + '</div><button class="btn tiny ' + (ok ? 'ghost' : 'dark') + '" type="button" data-cid="' + esc(c.id) + '" data-st="' + (ok ? 'aberta' : 'resolvida') + '">' + (ok ? 'Reabrir' : 'Marcar resolvida') + '</button></div>';
+  }).join('') : '<p class="muted" style="margin:0">Nenhuma correção informada. O botão “Informar correção” fica no menu lateral.</p>';
 }
 function usuarios() {
   $('#dUsers').innerHTML = S.users.slice().sort(function (a, b) { return a.nome.localeCompare(b.nome); }).map(function (u) {

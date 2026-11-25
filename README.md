@@ -6,15 +6,22 @@ Site para montar propostas comerciais Nanolux em PDF (formato apresentação 16:
 
 - **Início**: resumo (total de orçamentos, últimos 30 dias, este mês, última semana, % de conversão, tempo médio de conversão), alertas de orçamentos perto de vencer, comissão a receber no próximo mês e atalhos.
 - **Proposta comercial**: cliente, telefone (no PDF aparece "Nome | telefone"), projeto, local, link do Asana, itens, desconto e o PDF.
-  - **Calculadora de m² e comissão**: simulação das formas de pagamento, taxas da máquina, valor líquido, custos fixos, comissão e **m² efetivo** comparado à referência do produto. Se ficar abaixo, aparece o aviso de que precisa de autorização.
+  - **Calculadora de m² e comissão**: simulação das formas de pagamento, taxas, custos fixos, comissão e **m² efetivo** comparado à referência do produto. Se ficar abaixo, aparece o aviso de que precisa de autorização.
+    - m² efetivo = (valor total − custos fixos como o VT01 − desconto − taxas da forma de pagamento) ÷ área total
+    - Comissão = (valor total − custos fixos − desconto − taxas da forma de pagamento) × % de comissão
+    - A simulação começa com a forma escrita em "Pagamento (resumo)" do PDF (ex.: "Cartão em até 3 vezes" → Cartão 3x). Se o PDF fala em cartão e a simulação não tem cartão, aparece um aviso com o botão para corrigir.
   - Duas barras simulam ao vivo, sem mexer no orçamento até você aplicar: uma para o **valor do m²**, outra para o **desconto**. Os botões aplicam o valor escolhido, o **m² mínimo** ou o **desconto máximo** sem autorização.
   - Ao digitar um cliente que já existe (mesmo nome ou telefone), o site pergunta se é um **projeto novo** ou a **atualização** do orçamento antigo. O topo mostra um resumo dos orçamentos anteriores desse cliente.
-  - **Salvar** guarda o orçamento como *Rascunho* (amarelo). **Baixar PDF** muda para *PDF baixado* (verde).
+  - **Salvar** guarda o orçamento como *Rascunho* (amarelo). Baixar o PDF também salva no histórico e muda para *PDF baixado* (verde). Os salvamentos entram numa fila, então clicar em Salvar e Baixar PDF ao mesmo tempo não cria orçamento repetido.
+  - **PDF completo**: escolha a capa e marque os materiais cadastrados pela Diretoria. **Baixar PDF completo** junta capa → materiais → orçamento num arquivo só; **Baixar só o orçamento** gera apenas as páginas do orçamento.
+  - A **Versão** digitada em "Mais opções" é a que aparece no histórico, na barra de status e no faturamento.
 - **Histórico de orçamentos**: resumo no topo, busca por nome, telefone, cidade ou número e filtros de data, status, validade e vendedor. As versões do mesmo cliente ficam no mesmo bloco de cor.
   - A coluna do cliente fica fixa. O nome abre o cliente no Asana, e a tag **Asana ON/OFF** mostra se o link está vinculado (clique para vincular ou trocar).
   - As tags de validade são *Válido* (azul), *Vencido* e *Inválido · atualizado*.
   - A tabela mostra o desconto (nome e valor), o valor do m², o m² efetivo, o valor total, a simulação e o link do Asana.
   - **Atualizar** cria a próxima versão (V02, V03…) e invalida a anterior.
+  - **Excluir orçamento** (✕ na linha ou na barra da proposta): tira o orçamento do histórico, com motivo opcional. Se ele era uma versão nova, a versão anterior volta a valer. Orçamentos faturados só podem ser excluídos depois de excluir o faturamento.
+  - A tag **possível duplicado** marca registros com o mesmo número e versão; o filtro de situação tem a opção "Possíveis duplicados".
   - **Faturar** pede as formas de pagamento (obrigatórias, cada uma com valor e data), recalcula a comissão, comemora a venda com uma animação diferente a cada vez e gera o texto para copiar no Grupo de Pagamentos do WhatsApp.
   - **Ajustes no faturamento:** área a mais e desconto a mais, com observação interna obrigatória. O orçamento é atualizado junto, inclusive as formas de pagamento reais.
   - **Alterar faturamento** exige um motivo e guarda o histórico (antes e depois). O orçamento também é atualizado.
@@ -31,6 +38,8 @@ Site para montar propostas comerciais Nanolux em PDF (formato apresentação 16:
   - **Textos padrão da proposta** (apresentação, observações, pagamento, prazo, execução, turnos, informações da pág. 2) e os exemplos dos campos vazios.
   - Links do Asana e do WhatsApp.
   - Cadastro de usuários (nome + PIN, papel Vendedor ou Diretoria).
+  - **Materiais em PDF**: envie capas e materiais (até ~25 MB cada). Os arquivos ficam na pasta "Nanolux · Materiais em PDF" do Google Drive. Dá para renomear, mudar a ordem, desativar, ver e remover.
+  - **Correções informadas**: lista do que foi anotado pelo botão **Informar correção** (menu lateral, para todos os usuários), com prioridade e o botão "Marcar resolvida".
 
 ## Instalação (uma vez)
 
@@ -44,8 +53,8 @@ Site para montar propostas comerciais Nanolux em PDF (formato apresentação 16:
 4. Copie a URL do App da Web (termina em `/exec`) e coloque em [`config.js`](config.js), no campo `apiUrl`.
 5. Abra o site. No primeiro acesso você cria o usuário da **Diretoria**. Depois, cadastre os vendedores no Painel da Diretoria.
 
-As abas `Usuarios`, `Orcamentos`, `Faturamentos` e `Config` são criadas sozinhas na planilha. A coluna `json` guarda os dados completos: não edite à mão.
-Ao alterar `backend/Codigo.js` depois, faça **Implantar → Gerenciar implantações → editar → Nova versão** para a URL continuar a mesma.
+As abas `Usuarios`, `Orcamentos`, `Faturamentos`, `Config`, `Materiais` e `Correcoes` são criadas sozinhas na planilha. A coluna `json` guarda os dados completos: não edite à mão.
+Ao alterar `backend/Codigo.js` depois, faça **Implantar → Gerenciar implantações → editar → Nova versão** para a URL continuar a mesma. Se o Google pedir uma nova autorização (por exemplo, acesso ao Drive para os materiais em PDF), aceite.
 
 **Modo demonstração:** abra o site com `?demo=1` no fim do endereço. Ele usa o mesmo código do servidor, mas com uma planilha simulada salva só no navegador.
 
@@ -64,6 +73,6 @@ O login é feito por nome + PIN. O PIN é guardado com hash e sal, e a sessão u
 - `backend/Codigo.js`: o servidor do Apps Script, que também traz os cálculos de comissão e m² usados pelo site
 - `dev/gas-mock.js`: simulação da planilha para o modo demonstração
 - `assets.js`: logos, QR Code e fonte embutidos
-- `lib/`: [jsPDF](https://github.com/parallax/jsPDF) 4.2.1 (MIT)
+- `lib/`: [jsPDF](https://github.com/parallax/jsPDF) 4.2.1 (MIT) e [pdf-lib](https://github.com/Hopding/pdf-lib) 1.17.1 (MIT), usada para juntar os PDFs
 
 A fonte é a Liberation Sans (SIL Open Font License 1.1), com as mesmas medidas da Arial.

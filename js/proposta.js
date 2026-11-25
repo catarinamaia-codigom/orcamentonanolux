@@ -26,7 +26,7 @@ function padrao() {
     prazo: T().prazo, pagResumo: T().pagResumo, pagDetalhe: T().pagDetalhe,
     turnos: (T().turnos || []).slice(), execucao: T().execucao, obs: T().obs, intro: T().intro,
     descNome: '', descTipo: 'valor', descValor: '',
-    simulacao: [{ forma: 'PIX', pct: '100' }],
+    simulacao: [{ forma: C.formaDoTexto(T().pagResumo) || 'PIX', pct: '100' }], capaId: '', materiaisSel: [],
     itens: [item('protocolo', { area: '' }), item('nanolux', { area: '', qtd: '10' })]
   };
 }
@@ -239,25 +239,28 @@ function render() {
   c.linhas.forEach(function (l) { var el = document.querySelector('[data-sub="' + l.it.id + '"]'); if (el) el.textContent = brl(l.sub); });
 }
 var tmr;
-function agendar(semCalc) { if (meta) { meta.sujo = true; } clearTimeout(tmr); tmr = setTimeout(function () { salvarLocal(); render(); barra(); }, 130); if (!semCalc) calculadora(); }
+function agendar(semCalc) { if (meta) { meta.sujo = true; if (salvando) meta.sujoDepois = true; } clearTimeout(tmr); tmr = setTimeout(function () { salvarLocal(); render(); barra(); }, 130); if (!semCalc) calculadora(); }
 
 /* ---------- página ---------- */
+var IC_DL = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 19h16"/></svg>';
+function temMateriais() { return (S.materiais || []).some(function (m) { return m.ativo !== false; }); }
 NX.paginas.proposta = function (view) {
   if (!state) carregarLocal();
   view.innerHTML = '<div class="page">' +
     '<div class="page-head"><div><h1>Proposta comercial</h1><div class="sub">Monte o orçamento, simule o pagamento e baixe o PDF.</div></div>' +
       '<div class="actions"><button class="btn ghost" id="pNovo" type="button">Novo orçamento</button>' +
       '<button class="btn ghost" id="pSalvar" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg> Salvar</button>' +
-      '<button class="btn primary" id="pPdf" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 19h16"/></svg> Baixar PDF</button></div></div>' +
+      (temMateriais() ? '<button class="btn ghost" id="pPdf" type="button">Baixar só o orçamento</button><button class="btn primary" id="pPdfFull" type="button">' + IC_DL + ' Baixar PDF completo</button>'
+                      : '<button class="btn primary" id="pPdf" type="button">' + IC_DL + ' Baixar PDF</button>') + '</div></div>' +
     '<div class="status-bar" id="pStatus"></div><div id="pAnt"></div>' +
     '<details class="card calc" id="calc" open><summary><span class="n" style="display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--grad);color:#fff;font-size:12px">R$</span> Calculadora de m² e comissão <span class="hint" style="font-size:12.5px">simule as formas de pagamento — fica salva com o orçamento</span></summary>' +
       '<div class="calc-grid">' +
         '<div class="cbox"><h3>Formas de pagamento (simulação)</h3><div id="simRows"></div>' +
           '<div class="inline" style="justify-content:space-between;margin-top:6px"><button class="btn add tiny" id="simAdd" type="button">+ forma de pagamento</button><span class="sumline" id="simSum"></span></div>' +
-          '<div class="muted" id="simTab" style="font-size:11.5px;margin-top:8px"></div>' +
+          '<div id="simAviso"></div><div class="muted" id="simTab" style="font-size:11.5px;margin-top:8px"></div>' +
           '<button class="linkbtn" id="simPag" type="button" style="margin-top:8px">usar esta simulação na “Condição de pagamento” do PDF</button></div>' +
         '<div class="cbox"><h3>m² efetivo</h3><div class="sim-bar" id="simBar" hidden><span>Simulando nas barras — ainda não está no orçamento</span><span class="inline" style="gap:6px"><button class="btn tiny primary" id="simTudo" type="button">Aplicar tudo</button><button class="linkbtn" id="simReset" type="button">descartar</button></span></div>' +
-          '<div class="m2big"><div class="v" id="m2v">—</div><div class="r" id="m2r"></div></div><div id="verdict"></div>' +
+          '<div class="m2big"><div class="v" id="m2v">—</div><div class="r" id="m2r"></div></div><div class="muted" id="m2nota" style="font-size:11.5px;margin:-6px 0 10px"></div><div id="verdict"></div>' +
           '<div class="slider-box" id="slBox"><div class="top"><span>Valor do m² no orçamento</span><b id="slV"></b></div><input type="range" id="sl" min="0" max="1000" step="1" aria-label="Valor do m²"><div class="range-scale"><span id="slMin"></span><span id="slMax"></span></div>' +
           '<div class="minline"><span id="minTxt" class="muted"></span><span class="inline" style="gap:6px"><button class="btn tiny dark" id="slApl" type="button" hidden>Aplicar</button><button class="btn tiny ghost" id="minApl" type="button">Aplicar mínimo</button></span></div></div>' +
           '<div class="slider-box" id="sdBox"><div class="top"><span id="sdLbl">Desconto</span><b id="sdV"></b></div><input type="range" id="sd" min="0" max="100" step="1" aria-label="Desconto"><div class="range-scale"><span id="sdMin"></span><span id="sdMax"></span></div>' +
@@ -285,6 +288,7 @@ NX.paginas.proposta = function (view) {
           '<div class="f">Tipo<div class="seg" id="descTipo"><button type="button" data-v="valor">R$</button><button type="button" data-v="pct">%</button></div></div>' +
           '<label class="f">Valor do desconto<input type="text" inputmode="decimal" data-f="descValor" placeholder="0,00"></label></div></div>' +
         '<div class="totals" id="totals"></div></div>' +
+      (temMateriais() ? '<div class="card" id="matCard"><h2><span class="n">4</span>PDF completo</h2><p class="muted" style="margin:-6px 0 12px;font-size:12.5px">A capa e os materiais marcados entram antes das páginas do orçamento.</p><div id="matBox"></div></div>' : '') +
       '<details class="card" id="more"><summary>Mais opções <span class="hint" style="font-size:12px;margin-left:auto;margin-right:10px">condições, observações, cabeçalho</span></summary><div class="grid">' +
         '<label class="f">Representante<input type="text" data-f="representante"></label><label class="f">Versão<input type="text" data-f="versao"></label>' +
         '<label class="f full">Versões anteriores<input type="text" data-f="anteriores"></label>' +
@@ -364,21 +368,24 @@ function barra() {
   var o = meta.id ? reg(meta.id) : null, h = '', ro = !!meta.ro;
   if (meta.atualizaDe) {
     var ant = reg(meta.atualizaDe);
-    h = '<span class="tag rascunho">Nova versão V' + pad(meta.versaoN) + '</span><span>Atualizando <b>' + esc(state.numero) + '</b>' + (ant ? ' (V' + pad(ant.versao || 1) + ')' : '') + '. Ao salvar, a versão anterior fica <b>inválida</b>.</span>';
+    h = '<span class="tag rascunho">Nova versão ' + esc(state.versao || 'V' + pad(meta.versaoN)) + '</span><span>Atualizando <b>' + esc(state.numero) + '</b>' + (ant ? ' (' + esc(NX.versao(ant)) + ')' : '') + '. Ao salvar, a versão anterior fica <b>inválida</b>.</span>';
   } else if (o) {
-    h = NX.statusTag(o) + NX.situacaoTag(o) + '<span><b>V' + pad(o.versao || 1) + '</b> · salvo em ' + NX.dataBR(String(o.atualizadoEm).slice(0, 10)) + ' ' + String(new Date(o.atualizadoEm).toTimeString()).slice(0, 5) + (NX.eDiretor() && o.vendedor ? ' · ' + esc(o.vendedor) : '') + '</span>';
+    h = NX.statusTag(o) + NX.situacaoTag(o) + '<span><b>' + esc(NX.versao(o)) + '</b> · salvo em ' + NX.dataBR(String(o.atualizadoEm).slice(0, 10)) + ' ' + String(new Date(o.atualizadoEm).toTimeString()).slice(0, 5) + (NX.eDiretor() && o.vendedor ? ' · ' + esc(o.vendedor) : '') + '</span>';
     if (ro) h += '<span class="muted">' + (o.status === 'faturado' ? 'Faturado: só leitura.' : 'Existe uma versão mais nova: só leitura.') + '</span>';
   } else h = '<span class="tag invalido">Novo</span><span class="muted">Ainda não salvo.</span>';
-  if (meta.sujo && !ro) h += '<span class="tag alerta">alterações não salvas</span>';
+  if (salvando) h += '<span class="tag valido"><span class="spinner spin-sm" style="width:11px;height:11px;border-width:2px"></span> salvando…</span>';
+  else if (meta.sujo && !ro) h += '<span class="tag alerta">alterações não salvas</span>';
   h += '<span class="sp"></span>';
   if (o && !meta.atualizaDe && o.status !== 'faturado') h += '<button class="btn tiny ghost" id="sbAtual" type="button">Atualizar (nova versão)</button>';
   if (o && !ro && o.status !== 'faturado') h += '<button class="btn tiny ghost" id="sbFat" type="button">Faturar</button>';
+  if (o && o.status !== 'faturado') h += '<button class="btn tiny danger" id="sbDel" type="button">Excluir</button>';
   el.innerHTML = h; el.classList.toggle('ro', ro);
   renderAnteriores();
   var a = $('#sbAtual'); if (a) a.onclick = function () { P.atualizar(o.id); };
   var f = $('#sbFat'); if (f) f.onclick = function () { if (meta.sujo) return NX.toast('Salve as alterações antes de faturar.', true); NX.faturar(o.id); };
+  var dl = $('#sbDel'); if (dl) dl.onclick = function () { NX.excluirOrcamento(o.id, function () { state = padrao(); meta = {}; salvarLocal(); NX.ir('proposta'); }); };
   var form = $('#form'); if (form) form.classList.toggle('ro', ro);
-  $('#pSalvar').disabled = ro; $$('#calc input, #calc select, #calc button').forEach(function (x) { x.disabled = ro; });
+  $('#pSalvar').disabled = ro || salvando; $$('#calc input, #calc select, #calc button').forEach(function (x) { x.disabled = ro; });
 }
 
 function preencher() {
@@ -386,7 +393,7 @@ function preencher() {
   $$('[data-f]', form).forEach(function (el) { el.value = state[el.dataset.f] == null ? '' : state[el.dataset.f]; });
   $$('[data-turno]', form).forEach(function (el) { el.checked = (state.turnos || []).indexOf(el.dataset.turno) >= 0; });
   $$('#descTipo button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === state.descTipo); });
-  renderItens(); renderSim();
+  renderItens(); renderSim(); renderMateriais();
 }
 function presetOpts(sel) {
   var ps = PRESETS(), ks = Object.keys(ps);
@@ -451,15 +458,19 @@ function calculadora() {
   var tab = C.tabelaEm(S.cfg, state.emissao), st = $('#simTab');
   if (st) st.textContent = 'Simulação com a tabela de comissão e taxas ' + (tab.desde <= '2000-01-01' ? 'inicial' : 'vigente desde ' + NX.dataBR(tab.desde)) + ' (data de emissão ' + NX.dataBR(state.emissao) + '). No faturamento, valem as datas de cada pagamento.';
   var ss = $('#simSum'); ss.textContent = 'Total: ' + String(Math.round(soma * 100) / 100).replace('.', ',') + '%' + (sOk ? '' : ' (precisa somar 100%)'); ss.classList.toggle('bad', !sOk);
+  var formaPdf = C.formaDoTexto(state.pagResumo), simCartao = state.simulacao.some(function (p) { return /^Cart/.test(p.forma) && num(p.pct) > 0; }), av = $('#simAviso');
+  if (av) av.innerHTML = /^Cart/.test(formaPdf) && !simCartao ? '<div class="verdict no" style="margin-top:10px;font-size:12.5px">' + NX.IC.alerta + '<span>O PDF diz “' + esc(state.pagResumo) + '”, mas a simulação não tem cartão: as taxas do cartão não estão entrando no m² efetivo nem na comissão. <button class="linkbtn" id="simComoPdf" type="button" data-forma="' + esc(formaPdf) + '">Simular ' + esc(formaPdf) + '</button></span></div>' : '';
   $('#fin').innerHTML = (simulando ? '<div class="sim-tag">Valores com a simulação das barras</div>' : '') +
-    '<div class="kv"><span>Valor final ao cliente</span><b>' + brl(a.final) + '</b></div>' +
+    '<div class="kv"><span>Valor total</span><b>' + brl(a.total) + '</b></div>' +
+    '<div class="kv"><span>Custos fixos <small class="muted">(VT01 e itens fora da área + fixo)</small></span><b>− ' + brl(a.fixos) + '</b></div>' +
     (a.desc > 0 ? '<div class="kv"><span>Desconto</span><b>− ' + brl(a.desc) + '</b></div>' : '') +
-    '<div class="kv"><span>Taxas da máquina</span><b>− ' + brl(a.taxas) + '</b></div>' +
-    '<div class="kv"><span>Valor líquido SOMMAR</span><b>' + brl(a.liquido) + '</b></div>' +
-    '<div class="kv"><span>Custos fixos <small class="muted">(itens fora da área + fixo)</small></span><b>− ' + brl(a.fixos) + '</b></div>' +
-    '<div class="kv" style="font-size:14px"><span><b>Sua comissão</b> <small class="muted">(' + f2(a.comissaoPct) + '% do líquido)</small></span><b style="color:#126e64;font-size:16px">' + brl(a.comissao) + '</b></div>';
+    '<div class="kv"><span>Taxas da forma de pagamento</span><b>− ' + brl(a.taxas) + '</b></div>' +
+    '<div class="kv"><span><b>Base</b> <small class="muted">(total − fixos − desconto − taxas)</small></span><b>' + brl(a.baseComissao) + '</b></div>' +
+    '<div class="kv" style="font-size:14px"><span><b>Sua comissão</b> <small class="muted">(' + f2(a.comissaoPct) + '% da base)</small></span><b style="color:#126e64;font-size:16px">' + brl(a.comissao) + '</b></div>' +
+    '<div class="kv" style="font-size:12px;color:var(--muted)"><span>Valor final ao cliente</span><span>' + brl(a.final) + '</span></div>';
   $('#m2v').textContent = temArea ? brl(a.m2ef) : '—';
   $('#m2r').innerHTML = temArea ? 'referência<br><b>' + brl(a.ref) + '</b>' : '';
+  var m2n = $('#m2nota'); if (m2n) m2n.innerHTML = temArea ? '= (' + brl(a.total) + ' − ' + brl(a.fixos) + ' − ' + brl(a.desc) + ' − ' + brl(a.taxas) + ') ÷ ' + f2(a.area) + ' m²' : '';
   var v = $('#verdict');
   if (!temArea) v.innerHTML = '<div class="verdict ok" style="background:var(--soft);color:var(--muted)">Adicione um item que some na área total para calcular o m² efetivo.</div>';
   else if (!a.ref) v.innerHTML = '<div class="verdict ok">' + NX.IC.ok + '<span>Sem valor de referência cadastrado para este produto na Diretoria.</span></div>';
@@ -510,7 +521,15 @@ function ligar(view) {
   var form = $('#form', view);
   $('#pNovo').onclick = function () { P.novo(); };
   $('#pSalvar').onclick = function () { salvar(false).catch(function () {}); };
-  $('#pPdf').onclick = baixarPDF;
+  $('#pPdf').onclick = function () { baixarPDF(false); };
+  var full = $('#pPdfFull'); if (full) full.onclick = function () { baixarPDF(true); };
+  var mb = $('#matBox', view);
+  if (mb) mb.addEventListener('change', function (e) {
+    var t = e.target;
+    if (t.id === 'capaSel') state.capaId = t.value;
+    else if (t.dataset.mat) { var l = (state.materiaisSel || []).filter(function (x) { return x !== t.dataset.mat; }); if (t.checked) l.push(t.dataset.mat); state.materiaisSel = l; }
+    salvarLocal(); ordemTxt();
+  });
   form.addEventListener('input', function (e) {
     sim = { preco: null, desc: null };
     var t = e.target, f = t.dataset.f, k = t.dataset.k;
@@ -569,6 +588,7 @@ function ligar(view) {
     else if (b.id === 'sdApl') { definirDesconto(sim.desc); sim.desc = null; agendar(); NX.toast('Desconto aplicado ao orçamento'); }
     else if (b.id === 'simTudo') { if (sim.preco != null) definirPrecoArea(sim.preco); if (sim.desc != null) definirDesconto(sim.desc); sim = { preco: null, desc: null }; agendar(); NX.toast('Simulação aplicada ao orçamento'); }
     else if (b.id === 'simReset') { sim = { preco: null, desc: null }; calculadora(); }
+    else if (b.id === 'simComoPdf') { state.simulacao = [{ forma: b.dataset.forma, pct: '100' }]; renderSim(); agendar(); NX.toast('Simulação ajustada para ' + b.dataset.forma); }
     else if (b.id === 'simPag') {
       var a = C.analise(state, S.cfg);
       state.pagResumo = a.pagamentos.map(function (p) { return (state.simulacao.length > 1 ? String(p.pct).replace('.', ',') + '% ' : '') + p.forma; }).join(' + ');
@@ -587,13 +607,23 @@ function salvar(pdf) {
   }
   return salvarDeFato(pdf);
 }
+/* fila: um salvamento por vez, sempre com o id mais recente (evita orçamentos repetidos) */
+var fila = Promise.resolve(), salvando = 0;
 function salvarDeFato(pdf) {
   if (meta.ro) { NX.toast('Este orçamento é só leitura. Use "Atualizar" para criar uma nova versão.', true); return Promise.reject(new Error('ro')); }
+  salvando++; barra();
+  var p = fila.then(function () { return salvarAgora(pdf); });
+  fila = p.catch(function () {});
+  return p.then(function (o) { salvando--; barra(); return o; }, function (e) { salvando--; barra(); throw e; });
+}
+function salvarAgora(pdf) {
   var btn = $('#pSalvar'); if (btn) btn.disabled = true;
+  meta.sujoDepois = false;
   clearTimeout(tmr);
   return NX.api('salvarOrcamento', { id: meta.id || undefined, atualizaDe: meta.atualizaDe || undefined, dados: state, pdf: !!pdf }).then(function (r) {
     var o = r.orcamento;
-    meta = { id: o.id, status: o.status, versaoN: o.versao, grupo: o.grupo, vendedor: o.vendedor, ro: false, sujo: false, salvoEm: o.atualizadoEm };
+    var sujo = meta.sujoDepois || false;
+    meta = { id: o.id, status: o.status, versaoN: o.versao, grupo: o.grupo, vendedor: o.vendedor, ro: false, sujo: sujo, salvoEm: o.atualizadoEm };
     NX.atualizarLocal(o); salvarLocal(); barra();
     if (!pdf) NX.toast('Salvo no histórico como Rascunho');
     return o;
@@ -721,39 +751,99 @@ function desenharPagina(pdf, pg, cache){
     pdf.link(r.x * K, r.y * K, r.w * K, r.h * K, {url:el.getAttribute('data-href')});
   });
 }
-async function baixarPDF() {
-  var btn = $('#pPdf'), ov = $('#overlay'), stage = $('#stage');
-  if (!window.jspdf || !window.NX_FONT) { alert('A biblioteca de PDF não carregou. Recarregue a página.'); return; }
-  btn.disabled = true; ov.classList.add('on'); $('#ovtxt').textContent = 'Gerando PDF…';
-  var gerou = false;
+async function gerarOrcamentoPDF() {
+  clearTimeout(tmr); salvarLocal(); render();
+  if (document.fonts && document.fonts.ready) await document.fonts.ready;
+  var pages = $$('#preview .pg'), stage = $('#stage');
+  var pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'pt', format: [720, 405], compress: true, putOnlyUsedFonts: true });
+  pdf.addFileToVFS('NX-Regular.ttf', NX_FONT.r); pdf.addFont('NX-Regular.ttf', 'NX', 'normal');
+  pdf.addFileToVFS('NX-Bold.ttf', NX_FONT.b); pdf.addFont('NX-Bold.ttf', 'NX', 'bold');
+  var cache = {};
   try {
-    clearTimeout(tmr); salvarLocal(); render();
-    if (document.fonts && document.fonts.ready) await document.fonts.ready;
-    var pages = $$('#preview .pg');
-    var pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'pt', format: [720, 405], compress: true, putOnlyUsedFonts: true });
-    pdf.addFileToVFS('NX-Regular.ttf', NX_FONT.r); pdf.addFont('NX-Regular.ttf', 'NX', 'normal');
-    pdf.addFileToVFS('NX-Bold.ttf', NX_FONT.b); pdf.addFont('NX-Bold.ttf', 'NX', 'bold');
-    var cache = {};
     for (var i = 0; i < pages.length; i++) {
-      $('#ovtxt').textContent = 'Gerando PDF… página ' + (i + 1) + ' de ' + pages.length;
+      $('#ovtxt').textContent = 'Gerando o orçamento… página ' + (i + 1) + ' de ' + pages.length;
       var cl = pages[i].cloneNode(true); cl.style.transform = 'none'; cl.style.position = 'relative';
       stage.innerHTML = ''; stage.appendChild(cl);
       await new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); });
       if (i > 0) pdf.addPage([720, 405], 'landscape');
       desenharPagina(pdf, cl, cache);
     }
-    pdf.setProperties({ title: state.numero + ' - Apresentação Nanolux e proposta - ' + (state.cliente || 'Cliente'), subject: 'Proposta comercial Nanolux', author: 'SOMMAR Soluções Sustentáveis LTDA.', creator: 'Sistema Nanolux SOMMAR' });
-    if (window.NX_NO_SAVE) window.NX_LAST_PDF = pdf; else pdf.save(nomeArquivo());
+  } finally { stage.innerHTML = ''; }
+  pdf.setProperties({ title: state.numero + ' - Apresentação Nanolux e proposta - ' + (state.cliente || 'Cliente'), subject: 'Proposta comercial Nanolux', author: 'SOMMAR Soluções Sustentáveis LTDA.', creator: 'Sistema Nanolux SOMMAR' });
+  return pdf;
+}
+/* materiais da Diretoria (capa + materiais), baixados uma vez por sessão */
+var matCache = {};
+function b64bytes(b64) { var bin = atob(b64), out = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; }
+function bytesMaterial(id) {
+  if (matCache[id]) return Promise.resolve(matCache[id]);
+  return NX.api('baixarMaterial', { id: id }).then(function (r) { matCache[id] = b64bytes(r.base64); return matCache[id]; });
+}
+function selecionados() {
+  var ms = (S.materiais || []).filter(function (m) { return m.ativo !== false; }), ids = ms.map(function (m) { return m.id; });
+  var capa = state.capaId && ids.indexOf(state.capaId) >= 0 ? state.capaId : '';
+  var mats = ms.filter(function (m) { return m.id !== capa && (state.materiaisSel || []).indexOf(m.id) >= 0; }).map(function (m) { return m.id; });
+  return (capa ? [capa] : []).concat(mats);
+}
+async function baixarPDF(completo) {
+  var btns = $$('#pPdf, #pPdfFull'), ov = $('#overlay');
+  if (!window.jspdf || !window.NX_FONT) { alert('A biblioteca de PDF não carregou. Recarregue a página.'); return; }
+  var ids = completo ? selecionados() : [];
+  if (completo && !ids.length) { NX.toast('Escolha a capa e/ou os materiais no quadro “PDF completo”.', true); var mc = $('#matCard'); if (mc) mc.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+  btns.forEach(function (b) { b.disabled = true; }); ov.classList.add('on'); $('#ovtxt').textContent = 'Gerando PDF…';
+  var gerou = false;
+  try {
+    var pdf = await gerarOrcamentoPDF(), nome = nomeArquivo();
+    if (!completo) {
+      if (window.NX_NO_SAVE) window.NX_LAST_PDF = pdf; else pdf.save(nome);
+    } else {
+      $('#ovtxt').textContent = 'Preparando a junção dos PDFs…';
+      await NX.carregarScript('lib/pdf-lib.min.js?v=1.17.1');
+      var L = window.PDFLib, out = await L.PDFDocument.create();
+      for (var i = 0; i < ids.length; i++) {
+        var m = (S.materiais || []).filter(function (x) { return x.id === ids[i]; })[0];
+        $('#ovtxt').textContent = 'Baixando ' + (m ? '“' + m.nome + '”' : 'material') + ' (' + (i + 1) + ' de ' + ids.length + ')…';
+        var src = await L.PDFDocument.load(await bytesMaterial(ids[i]), { ignoreEncryption: true });
+        (await out.copyPages(src, src.getPageIndices())).forEach(function (pg) { out.addPage(pg); });
+      }
+      $('#ovtxt').textContent = 'Montando o PDF completo…';
+      var orc = await L.PDFDocument.load(pdf.output('arraybuffer'));
+      (await out.copyPages(orc, orc.getPageIndices())).forEach(function (pg) { out.addPage(pg); });
+      out.setTitle(state.numero + ' - Proposta completa Nanolux - ' + (state.cliente || 'Cliente')); out.setAuthor('SOMMAR Soluções Sustentáveis LTDA.'); out.setCreator('Sistema Nanolux SOMMAR');
+      var bytes = await out.save();
+      nome = nome.replace(/^NANOLUX_ORCAMENTO/, 'NANOLUX_PROPOSTA_COMPLETA');
+      if (window.NX_NO_SAVE) window.NX_LAST_FULL = { bytes: bytes, paginas: out.getPageCount() };
+      else NX.baixarArquivo(bytes, nome, 'application/pdf');
+    }
     gerou = true;
   } catch (err) {
     console.error(err); alert('Não foi possível gerar o PDF: ' + (err && err.message ? err.message : err));
   } finally {
-    stage.innerHTML = ''; ov.classList.remove('on'); btn.disabled = false;
+    ov.classList.remove('on'); btns.forEach(function (b) { b.disabled = false; });
   }
   if (!gerou) return;
   if (meta.ro) { NX.toast('PDF baixado (orçamento só leitura, status não alterado)'); return; }
-  $('#ovtxt').textContent = 'Salvando…';
-  salvar(true).then(function () { NX.toast('PDF baixado · status: PDF baixado'); }, function () {});
+  salvar(true).then(function () { NX.toast((completo ? 'PDF completo baixado' : 'PDF baixado') + ' e salvo no histórico · status: PDF baixado'); }, function () {});
 }
 P.baixarPDF = baixarPDF;
+
+/* quadro "PDF completo": capa + materiais */
+function renderMateriais() {
+  var box = $('#matBox'); if (!box) return;
+  var ms = (S.materiais || []).filter(function (m) { return m.ativo !== false; }), capas = ms.filter(function (m) { return m.tipo === 'capa'; }), mats = ms.filter(function (m) { return m.tipo !== 'capa'; });
+  var sel = state.materiaisSel || [], tam = function (m) { return m.tamanho ? (m.tamanho > 1048576 ? NX.f2(m.tamanho / 1048576) + ' MB' : Math.max(1, Math.round(m.tamanho / 1024)) + ' KB') : ''; };
+  box.innerHTML = '<label class="f">Capa<select id="capaSel"><option value="">Sem capa</option>' + capas.map(function (m) { return '<option value="' + esc(m.id) + '"' + (m.id === state.capaId ? ' selected' : '') + '>' + esc(m.nome) + '</option>'; }).join('') + '</select></label>' +
+    '<div class="f" style="margin-top:12px">Materiais <span class="hint">(entram na ordem definida pela Diretoria)</span></div>' +
+    (mats.length ? '<div class="mat-list">' + mats.map(function (m) {
+      return '<label class="mat-it"><input type="checkbox" data-mat="' + esc(m.id) + '"' + (sel.indexOf(m.id) >= 0 ? ' checked' : '') + '><span>' + esc(m.nome) + '</span><small>' + (m.paginas ? m.paginas + ' pág. · ' : '') + tam(m) + '</small></label>';
+    }).join('') + '</div>' : '<p class="muted" style="margin:6px 0 0;font-size:12.5px">Nenhum material cadastrado ainda.</p>') +
+    '<p class="muted" id="matOrdem" style="font-size:12.5px;margin:10px 0 0"></p>';
+  ordemTxt();
+}
+function ordemTxt() {
+  var el = $('#matOrdem'); if (!el) return;
+  var ids = selecionados(), nomes = ids.map(function (id) { var m = (S.materiais || []).filter(function (x) { return x.id === id; })[0]; return m ? m.nome : ''; });
+  el.innerHTML = ids.length ? 'Ordem do PDF completo: <b>' + nomes.map(esc).join('</b> → <b>') + '</b> → <b>orçamento</b>' : 'Nada selecionado: o PDF completo fica igual ao orçamento.';
+  var b = $('#pPdfFull'); if (b) b.title = ids.length ? '' : 'Escolha a capa e/ou os materiais no quadro “PDF completo”';
+}
 })();

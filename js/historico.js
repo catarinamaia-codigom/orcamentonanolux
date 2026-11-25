@@ -34,7 +34,7 @@ NX.paginas.historico = function (view) {
       '<label class="f grow">Buscar<input type="search" id="fq" placeholder="Nome, telefone, cidade ou nº do orçamento" value="' + esc(F.q) + '"></label>' +
       '<label class="f">Emissão de<input type="date" id="fde" value="' + F.de + '"></label><label class="f">até<input type="date" id="fate" value="' + F.ate + '"></label>' +
       '<label class="f">Status<select id="fst"><option value="">Todos</option><option value="rascunho">Rascunho</option><option value="pdf">PDF baixado</option><option value="faturado">Faturado</option></select></label>' +
-      '<label class="f">Validade<select id="fsit"><option value="">Todas</option><option value="valido">Válidos</option><option value="vencido">Vencidos</option><option value="invalido">Inválidos (atualizados)</option><option value="faturado">Faturados</option></select></label>' +
+      '<label class="f">Validade<select id="fsit"><option value="">Todas</option><option value="valido">Válidos</option><option value="vencido">Vencidos</option><option value="invalido">Inválidos (atualizados)</option><option value="faturado">Faturados</option><option value="dup">Possíveis duplicados</option></select></label>' +
       (NX.eDiretor() ? '<label class="f">Vendedor<select id="fv"><option value="">Todos</option>' + S.users.map(function (u) { return '<option value="' + esc(u.id) + '">' + esc(u.nome) + '</option>'; }).join('') + '</select></label>' : '') +
     '</div><div id="fper">' + NX.presetsPeriodo(F.per) + '</div></div>' +
     '<div class="tiles mini" id="hResumo"></div><p class="count" id="hCount"></p><div class="tbl-wrap" id="hTbl"></div></div>';
@@ -56,6 +56,7 @@ NX.paginas.historico = function (view) {
     else if (b.dataset.a === 'faturar') NX.faturar(id);
     else if (b.dataset.a === 'verfat') NX.verFaturamento(b.dataset.fat);
     else if (b.dataset.a === 'asana') NX.vincularAsana(id, tabela);
+    else if (b.dataset.a === 'excluir') NX.excluirOrcamento(id);
   });
   tabela();
 };
@@ -83,13 +84,14 @@ function linhaSim(o) {
     '<small>comissão ≈ ' + brl(o.comissaoSimulada) + '</small></div>';
 }
 function tabela() {
-  var gs = NX.grupos(), dir = NX.eDiretor();
+  var gs = NX.grupos(), dir = NX.eDiretor(), dups = duplicados();
   var passa = function (o) {
     if (!NX.filtroTexto(o, F.q)) return false;
     if (F.de && (o.emissao || '') < F.de) return false;
     if (F.ate && (o.emissao || '') > F.ate) return false;
     if (F.status && o.status !== F.status) return false;
-    if (F.sit && NX.situacao(o).k !== F.sit) return false;
+    if (F.sit === 'dup') { if (!dups[o.id]) return false; }
+    else if (F.sit && NX.situacao(o).k !== F.sit) return false;
     if (F.vend && o.vendedorId !== F.vend) return false;
     return true;
   };
@@ -107,13 +109,14 @@ function tabela() {
       var acts = '<button class="btn tiny ghost" data-a="abrir" data-id="' + o.id + '">Abrir</button>';
       if (!g.faturado && o === g.atual) acts += '<button class="btn tiny ghost" data-a="atualizar" data-id="' + o.id + '">Atualizar</button><button class="btn tiny dark" data-a="faturar" data-id="' + o.id + '">Faturar</button>';
       if (fat) acts += '<button class="btn tiny ghost" data-a="verfat" data-fat="' + fat.id + '" data-id="' + o.id + '">Ver faturamento</button>';
+      if (o.status !== 'faturado') acts += '<button class="ibtn del" data-a="excluir" data-id="' + o.id + '" title="Excluir este orçamento">✕</button>';
       var loc = [o.local, o.projeto].filter(Boolean).map(esc).join(' · ');
       return '<tr class="' + (velho ? 'old' : '') + '">' +
         '<td class="stick"><div class="cli">' + (asana ? '<a class="cli-nome" href="' + esc(asana) + '" target="_blank" rel="noopener" title="Abrir este cliente no Asana">' + esc(o.cliente || 'Sem nome') + '</a>'
             : '<button class="cli-nome" type="button" data-a="asana" data-id="' + o.id + '" title="Vincular o link do Asana deste cliente">' + esc(o.cliente || 'Sem nome') + '</button>') +
           '<span class="nowrap">' + esc(o.telefone || 'sem telefone') + '</span>' + (loc ? '<span style="display:block">' + loc + '</span>' : '') +
           '<button class="asana-tag ' + (asana ? 'on' : 'off') + '" type="button" data-a="asana" data-id="' + o.id + '" title="' + (asana ? 'Vinculado ao Asana — clique para trocar o link' : 'Sem link do Asana — clique para vincular') + '">Asana ' + (asana ? 'ON' : 'OFF') + '</button></div></td>' +
-        '<td><div class="stk"><span class="nowrap">' + esc(o.numero || '') + '<span class="vtag">V' + pad(o.versao || 1) + '</span></span><small class="nowrap">emissão ' + NX.dataBR(o.emissao) + '</small>' + (dir && o.vendedor ? '<small>' + esc(o.vendedor) + '</small>' : '') + '</div></td>' +
+        '<td><div class="stk"><span class="nowrap">' + esc(o.numero || '') + '<span class="vtag">' + esc(NX.versao(o)) + '</span>' + (dups[o.id] ? '<span class="tag alerta" style="margin-left:6px" title="Outro registro tem o mesmo número e versão">possível duplicado</span>' : '') + '</span><small class="nowrap">emissão ' + NX.dataBR(o.emissao) + '</small>' + (dir && o.vendedor ? '<small>' + esc(o.vendedor) + '</small>' : '') + '</div></td>' +
         '<td><div class="stk" style="gap:4px;align-items:flex-start">' + NX.statusTag(o) + (o.status === 'faturado' ? '' : NX.situacaoTag(o)) + '<small class="nowrap">validade ' + NX.dataBR(o.validade) + '</small></div></td>' +
         '<td>' + (o.desconto > 0 ? '<div class="stk"><span>' + esc(o.nomeDesconto || 'Desconto') + '</span><b class="nowrap">− ' + brl(o.desconto) + '</b></div>' : '<span class="muted">Sem desconto</span>') + '</td>' +
         '<td class="right"><div class="stk"><b class="nowrap">' + brl(o.valorFinal) + '</b>' + (o.area > 0 ? '<small class="nowrap">' + brl(o.valorM2) + '/m² · ' + f2(o.area) + ' m²</small><small class="nowrap">efetivo ' + brl(o.m2Efetivo) + '/m²</small>' + (o.precisaAutorizacao ? '<small style="color:#9a4b00;font-weight:700">precisa de autorização</small>' : '') : '') + '</div></td>' +
@@ -123,6 +126,36 @@ function tabela() {
   }).join('');
   $('#hTbl').innerHTML = '<table class="t">' + head + corpo + '</table>';
 }
+
+function versaoFat(f) { var o = S.orcs.filter(function (x) { return x.id === f.orcamentoId; })[0]; return o ? NX.versao(o) : 'V' + pad(f.versao || 1); }
+/* possíveis duplicados: mesmo número de orçamento e mesma versão em mais de um registro */
+function duplicados() {
+  var por = {}, out = {};
+  S.orcs.forEach(function (o) { var k = (o.numero || '') + '|' + NX.norm(NX.versao(o)); (por[k] = por[k] || []).push(o); });
+  Object.keys(por).forEach(function (k) { if (por[k].length > 1) por[k].forEach(function (o) { out[o.id] = true; }); });
+  return out;
+}
+NX.excluirOrcamento = function (id, depois) {
+  var o = S.orcs.filter(function (x) { return x.id === id; })[0]; if (!o) return;
+  if (o.status === 'faturado') return NX.toast('Este orçamento está faturado. Exclua o faturamento primeiro.', true);
+  var ant = S.orcs.filter(function (x) { return x.substituidoPor === o.id; })[0];
+  NX.modal('<div class="modal-h"><div><h2>Excluir orçamento</h2><p>' + esc(o.cliente || 'Sem nome') + ' · ' + esc(o.numero || '') + ' ' + esc(NX.versao(o)) + ' · ' + brl(o.valorFinal) + ' · ' + NX.dataBR(o.emissao) + '</p></div><button class="btn ghost small" data-fechar>Fechar</button></div>' +
+    '<div class="modal-b"><p style="margin:0 0 12px;font-size:13.5px">O orçamento sai do histórico e dos resumos.' + (ant ? ' A versão anterior (<b>' + esc(NX.versao(ant)) + '</b>) volta a valer.' : '') + ' A exclusão fica registrada na planilha.</p>' +
+    '<label class="f">Motivo <span class="hint">(opcional)</span><input type="text" id="eoMot" placeholder="Ex.: proposta repetida"></label><div class="err" id="eoErr" style="margin-top:8px"></div></div>' +
+    '<div class="modal-f"><button class="btn ghost" data-fechar>Cancelar</button><button class="btn danger" id="eoOk" type="button">Excluir orçamento</button></div>',
+    function (m, fechar) {
+      m.style.maxWidth = '560px';
+      $('#eoOk', m).onclick = function () {
+        var b = this; b.disabled = true;
+        NX.api('excluirOrcamento', { id: id, motivo: $('#eoMot', m).value.trim() }).then(function (r) {
+          S.orcs = S.orcs.filter(function (x) { return x.id !== id; });
+          (r.orcamentos || []).forEach(function (x) { if (x.id !== id && !x.excluido) NX.atualizarLocal(x); });
+          fechar(); NX.toast('Orçamento excluído');
+          if (depois) depois(); else if (NX.rotaAtual() === 'historico') NX.paginas.historico($('#view'));
+        }).catch(function (e) { b.disabled = false; $('#eoErr', m).textContent = e.message; });
+      };
+    });
+};
 
 /* ---------- vínculo com o Asana ---------- */
 NX.vincularAsana = function (id, depois) {
@@ -163,7 +196,7 @@ function textoWhats(o, pags) {
 /* janela de pagamentos — usada para faturar e para alterar um faturamento */
 function modalPagamentos(op) {
   var o = op.orc, h = NX.hoje(), pags = op.pags;
-  NX.modal('<div class="modal-h"><div><h2>' + op.titulo + '</h2><p>' + esc(o.cliente || 'Sem nome') + (o.telefone ? ' · ' + esc(o.telefone) : '') + ' · ' + esc(o.numero) + ' V' + pad(o.versao || 1) + '</p></div><button class="btn ghost small" data-fechar>Fechar</button></div>' +
+  NX.modal('<div class="modal-h"><div><h2>' + op.titulo + '</h2><p>' + esc(o.cliente || 'Sem nome') + (o.telefone ? ' · ' + esc(o.telefone) : '') + ' · ' + esc(o.numero) + ' ' + esc(NX.versao(o)) + '</p></div><button class="btn ghost small" data-fechar>Fechar</button></div>' +
     '<div class="modal-b"><div class="fat-grid"><div>' + (op.aviso || '') +
       (op.motivo ? '<label class="f" style="margin-bottom:12px"><span>Motivo da alteração <span style="color:var(--danger)">*</span> <span class="hint">(obrigatório — fica registrado no histórico)</span></span><textarea id="fMot" rows="2" placeholder="Ex.: cliente mudou a forma de pagamento para PIX"></textarea></label>' : '') +
       '<details class="aj-box" id="fAj"><summary style="cursor:pointer;font-weight:700;font-size:13px;color:#8a5300">Ajustes no faturamento <span class="hint" style="font-weight:500">área ou desconto a mais — o orçamento é atualizado junto</span></summary><div style="margin-top:10px">' +
@@ -201,11 +234,12 @@ function modalPagamentos(op) {
         var ag = C.agenda(a.pagamentos, S.cfg), porMes = {};
         ag.forEach(function (x) { porMes[x.mesComissao] = (porMes[x.mesComissao] || 0) + x.valor; });
         $('#fFin', m).innerHTML =
-          '<div class="kv"><span>Taxas da máquina</span><b>− ' + brl(a.taxas) + '</b></div><div class="kv"><span>Valor líquido SOMMAR</span><b>' + brl(a.liquido) + '</b></div>' +
+          '<div class="kv"><span>Valor final</span><b>' + brl(a.final) + '</b></div><div class="kv"><span>Custos fixos <small class="muted">(VT01 e fixos)</small></span><b>− ' + brl(a.fixos) + '</b></div>' +
+          '<div class="kv"><span>Taxas da forma de pagamento</span><b>− ' + brl(a.taxas) + '</b></div><div class="kv"><span><b>Base da comissão</b></span><b>' + brl(a.baseComissao) + '</b></div>' +
           '<div class="kv"><span>m² efetivo <small class="muted">(ref. ' + brl(a.ref) + ')</small></span><b>' + (a.area > 0 ? brl(a.m2ef) : '—') + '</b></div>' +
           (a.precisaAutorizacao ? '<div class="verdict no" style="margin:6px 0">' + NX.IC.alerta + '<span>m² efetivo abaixo da referência — confirme a autorização da Diretoria.</span></div>' : '') +
           a.pagamentos.map(function (p, i) { return '<div class="kv" style="font-size:12px;color:var(--muted)"><span>' + (LETRAS[i] || i + 1) + '. ' + esc(p.forma) + ' · ' + NX.dataBR(p.data) + ' · ' + f2(p.comissaoPct) + '% / taxa ' + f2(p.taxaPct) + '%</span><span>' + brl(p.comissao) + '</span></div>'; }).join('') +
-          '<div class="kv" style="font-size:14px"><span><b>Comissão</b> <small class="muted">(' + f2(a.comissaoPct) + '% do líquido)</small></span><b style="color:#126e64;font-size:16px">' + brl(a.comissao) + '</b></div>' +
+          '<div class="kv" style="font-size:14px"><span><b>Comissão</b> <small class="muted">(' + f2(a.comissaoPct) + '% da base)</small></span><b style="color:#126e64;font-size:16px">' + brl(a.comissao) + '</b></div>' +
           (op.antes != null ? '<div class="muted" style="font-size:12px">Antes da alteração: ' + brl(op.antes) + '</div>' : '') +
           (Object.keys(porMes).length ? '<div class="muted" style="font-size:12px;margin-top:6px">Recebimento da comissão: ' + Object.keys(porMes).sort().map(function (k) { return '<b>' + brl(porMes[k]) + '</b> em ' + NX.mesNome(k, true); }).join(' · ') + '</div>' : '');
         var itens = textoWhats({ cliente: o.cliente, telefone: o.telefone, valorFinal: a.final }, pags);
@@ -282,7 +316,7 @@ NX.alterarFaturamento = function (fid) {
 };
 NX.excluirFaturamento = function (fid) {
   var f = S.fats.filter(function (x) { return x.id === fid; })[0]; if (!f) return;
-  NX.modal('<div class="modal-h"><div><h2>Excluir faturamento</h2><p>' + esc(f.cliente || '') + ' · ' + esc(f.numero || '') + ' V' + pad(f.versao || 1) + ' · ' + brl(f.valorFinal) + ' · comissão ' + brl(f.comissao) + '</p></div><button class="btn ghost small" data-fechar>Fechar</button></div>' +
+  NX.modal('<div class="modal-h"><div><h2>Excluir faturamento</h2><p>' + esc(f.cliente || '') + ' · ' + esc(f.numero || '') + ' ' + esc(versaoFat(f)) + ' · ' + brl(f.valorFinal) + ' · comissão ' + brl(f.comissao) + '</p></div><button class="btn ghost small" data-fechar>Fechar</button></div>' +
     '<div class="modal-b"><div class="verdict no" style="margin-bottom:12px">' + NX.IC.alerta + '<span>O faturamento sai das comissões e das previsões. O orçamento volta para <b>' + (S.orcs.filter(function (o) { return o.id === f.orcamentoId; }).map(function (o) { return o.pdfEm ? 'PDF baixado' : 'Rascunho'; })[0] || 'o status anterior') + '</b> e pode ser faturado de novo. A exclusão fica registrada na planilha com o motivo.</span></div>' +
     '<label class="f"><span>Motivo da exclusão <span style="color:var(--danger)">*</span></span><textarea id="xMot" rows="3" placeholder="Ex.: cliente desistiu; faturado por engano"></textarea></label><div class="err" id="xErr" style="margin-top:8px"></div></div>' +
     '<div class="modal-f"><button class="btn ghost" data-fechar>Cancelar</button><button class="btn danger" id="xOk" type="button" disabled>Excluir faturamento</button></div>',
@@ -307,13 +341,13 @@ NX.verFaturamento = function (fid) {
   var itens = textoWhats(f, f.pagamentos || []), porMes = {}, hist = (f.historico || []).slice().reverse();
   (f.agenda || []).forEach(function (x) { porMes[x.mesComissao] = (porMes[x.mesComissao] || 0) + x.valor; });
   var resumoPag = function (l) { return (l || []).map(function (p) { return esc(p.forma) + ' ' + brl(p.valor); }).join(' + '); };
-  NX.modal('<div class="modal-h"><div><h2>Faturamento · ' + esc(f.cliente || '') + '</h2><p>' + esc(f.numero || '') + ' V' + pad(f.versao || 1) + ' · faturado em ' + NX.dataBR(String(f.faturadoEm).slice(0, 10)) + (f.faturadoPor ? ' por ' + esc(f.faturadoPor) : '') + (f.alteradoEm ? ' · alterado em ' + NX.dataBR(String(f.alteradoEm).slice(0, 10)) : '') + '</p></div><button class="btn ghost small" data-fechar>Fechar</button></div>' +
+  NX.modal('<div class="modal-h"><div><h2>Faturamento · ' + esc(f.cliente || '') + '</h2><p>' + esc(f.numero || '') + ' ' + esc(versaoFat(f)) + ' · faturado em ' + NX.dataBR(String(f.faturadoEm).slice(0, 10)) + (f.faturadoPor ? ' por ' + esc(f.faturadoPor) : '') + (f.alteradoEm ? ' · alterado em ' + NX.dataBR(String(f.alteradoEm).slice(0, 10)) : '') + '</p></div><button class="btn ghost small" data-fechar>Fechar</button></div>' +
     '<div class="modal-b"><div class="fat-grid"><div><div class="cbox"><h3>Pagamentos</h3>' + (f.pagamentos || []).map(function (p, i) {
       return '<div class="kv"><span><b>' + (LETRAS[i] || i + 1) + '.</b> ' + esc(p.forma) + ' · ' + NX.dataBR(p.data) + (p.comissao != null ? '<br><small class="muted">comissão ' + brl(p.comissao) + (p.comissaoPct != null ? ' (' + f2(p.comissaoPct) + '%' + (p.taxaPct ? ', taxa ' + f2(p.taxaPct) + '%' : '') + ')' : '') + '</small>' : '') + '</span><b>' + brl(p.valor) + '</b></div>';
     }).join('') + '</div><div class="cbox" style="margin-top:12px"><h3>Comissão</h3>' +
       '<div class="kv"><span>Valor final</span><b>' + brl(f.valorFinal) + '</b></div><div class="kv"><span>Taxas da máquina</span><b>− ' + brl(f.taxas) + '</b></div>' +
-      '<div class="kv"><span>Valor líquido</span><b>' + brl(f.liquido) + '</b></div><div class="kv"><span>m² efetivo</span><b>' + (f.area > 0 ? brl(f.m2Efetivo) : '—') + '</b></div>' +
-      '<div class="kv"><span><b>Comissão</b> (' + f2(f.comissaoPct) + '%)</span><b style="color:#126e64">' + brl(f.comissao) + '</b></div>' +
+      (f.baseComissao != null ? '<div class="kv"><span>Custos fixos</span><b>− ' + brl(f.fixos) + '</b></div><div class="kv"><span>Base da comissão</span><b>' + brl(f.baseComissao) + '</b></div>' : '<div class="kv"><span>Valor líquido <small class="muted">(regra antiga)</small></span><b>' + brl(f.liquido) + '</b></div>') + '<div class="kv"><span>m² efetivo</span><b>' + (f.area > 0 ? brl(f.m2Efetivo) : '—') + '</b></div>' +
+      '<div class="kv"><span><b>Comissão</b> (' + f2(f.comissaoPct) + '%' + (f.baseComissao != null ? ' da base' : ' do líquido') + ')</span><b style="color:#126e64">' + brl(f.comissao) + '</b></div>' +
       '<div class="muted" style="font-size:12px;margin-top:6px">Recebimento: ' + Object.keys(porMes).sort().map(function (k) { return '<b>' + brl(porMes[k]) + '</b> em ' + NX.mesNome(k, true); }).join(' · ') + '</div></div>' +
       (f.obs ? '<p class="muted" style="font-size:13px">Obs.: ' + esc(f.obs) + '</p>' : '') +
       ((f.ajustes || []).length ? '<div class="cbox" style="margin-top:12px;border-color:#f1cf7a;background:#fffbf0"><h3 style="color:#8a5300">Ajustes no faturamento</h3>' + f.ajustes.map(function (x) {
