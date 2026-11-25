@@ -15,12 +15,15 @@ Site para montar propostas comerciais Nanolux em PDF (formato apresentação 16:
   - **Salvar** guarda o orçamento como *Rascunho* (amarelo). Baixar o PDF também salva no histórico e muda para *PDF baixado* (verde). Os salvamentos entram numa fila, então clicar em Salvar e Baixar PDF ao mesmo tempo não cria orçamento repetido.
   - **PDF completo**: escolha a capa e marque os materiais cadastrados pela Diretoria. **Baixar PDF completo** junta capa → materiais → orçamento num arquivo só; **Baixar só o orçamento** gera apenas as páginas do orçamento.
   - A **Versão** digitada em "Mais opções" é a que aparece no histórico, na barra de status e no faturamento.
+  - Num orçamento já salvo, trocar a **versão** ou o **número** e salvar cria um registro novo (uma nova versão do mesmo cliente). O registro anterior continua no histórico do jeito que estava.
+  - **Nova versão** (na barra da proposta) cria a próxima versão a partir do que está na tela, inclusive o que você já editou, sem gravar nada por cima da versão aberta.
+  - **Duplicar** cria um orçamento novo, com outro número e V01, a partir do aberto. Funciona também com orçamentos faturados.
 - **Histórico de orçamentos**: resumo no topo, busca por nome, telefone, cidade ou número e filtros de data, status, validade e vendedor. As versões do mesmo cliente ficam no mesmo bloco de cor.
   - A coluna do cliente fica fixa. O nome abre o cliente no Asana, e a tag **Asana ON/OFF** mostra se o link está vinculado (clique para vincular ou trocar).
-  - As tags de validade são *Válido* (azul), *Vencido* e *Inválido · atualizado*.
+  - As tags de validade são *Válido* (azul) e *Vencido*. Criar uma versão nova não invalida as anteriores: todas continuam valendo até a própria validade.
   - A tabela mostra o desconto (nome e valor), o valor do m², o m² efetivo, o valor total, a simulação e o link do Asana.
-  - **Atualizar** cria a próxima versão (V02, V03…) e invalida a anterior.
-  - **Excluir orçamento** (✕ na linha ou na barra da proposta): tira o orçamento do histórico, com motivo opcional. Se ele era uma versão nova, a versão anterior volta a valer. Orçamentos faturados só podem ser excluídos depois de excluir o faturamento.
+  - **Nova versão** cria a próxima versão (V02, V03…) a partir da linha escolhida; as outras continuam valendo. **Duplicar** cria um orçamento novo a partir da linha. Quando uma versão é faturada, as outras do mesmo cliente não podem mais ser faturadas.
+  - **Excluir orçamento** (✕ na linha ou na barra da proposta): tira o orçamento do histórico. O motivo é obrigatório, escolhido entre as opções da Diretoria ou "Outro". Orçamentos faturados só podem ser excluídos depois de excluir o faturamento.
   - A tag **possível duplicado** marca registros com o mesmo número e versão; o filtro de situação tem a opção "Possíveis duplicados".
   - **Faturar** pede as formas de pagamento (obrigatórias, cada uma com valor e data), recalcula a comissão, comemora a venda com uma animação diferente a cada vez e gera o texto para copiar no Grupo de Pagamentos do WhatsApp.
   - **Ajustes no faturamento:** área a mais e desconto a mais, com observação interna obrigatória. O orçamento é atualizado junto, inclusive as formas de pagamento reais.
@@ -36,6 +39,7 @@ Site para montar propostas comerciais Nanolux em PDF (formato apresentação 16:
   - Cartão parcelado: comissão integral ou dividida pelas parcelas.
   - Custo fixo por projeto e catálogo de produtos com preço padrão e **referência do m²**.
   - **Textos padrão da proposta** (apresentação, observações, pagamento, prazo, execução, turnos, informações da pág. 2) e os exemplos dos campos vazios.
+  - **Motivos de exclusão de orçamento** (um por linha).
   - Links do Asana e do WhatsApp.
   - Cadastro de usuários (nome + PIN, papel Vendedor ou Diretoria).
   - **Materiais em PDF**: envie capas e materiais (até ~25 MB cada). Os arquivos ficam na pasta "Nanolux · Materiais em PDF" do Google Drive. Dá para renomear, mudar a ordem, desativar, ver e remover.

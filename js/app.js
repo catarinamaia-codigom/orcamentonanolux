@@ -24,6 +24,12 @@ NX.mesNome = function (ym, curto) { var m = +String(ym).slice(5, 7) - 1, y = Str
 NX.norm = function (s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); };
 NX.digitos = function (s) { return String(s || '').replace(/\D/g, ''); };
 NX.url = function (s) { s = String(s || '').trim(); return /^https?:\/\//i.test(s) ? s : ''; };
+/* próximo número de versão do grupo, olhando o número salvo e o que foi digitado (V03, v4…) */
+NX.proximaVersao = function (grupo) {
+  var n = 0;
+  S.orcs.forEach(function (x) { if (x.grupo !== grupo) return; var m = /(\d+)/.exec(NX.versao(x)); n = Math.max(n, x.versao || 1, m ? +m[1] : 0); });
+  return n + 1;
+};
 NX.versao = function (o) { var v = o && o.dados && String(o.dados.versao || '').trim(); return v || ('V' + NX.pad((o && o.versao) || 1)); };
 NX.carregarScript = function (src) {
   NX._scripts = NX._scripts || {};
@@ -113,13 +119,11 @@ NX.sair = function (silencioso) {
 NX.atualizarLocal = function (o) {
   var i = S.orcs.findIndex(function (x) { return x.id === o.id; });
   if (i >= 0) S.orcs[i] = o; else S.orcs.push(o);
-  if (o.anteriorId) S.orcs.forEach(function (x) { if (x.grupo === o.grupo && x.id !== o.id && !x.substituidoPor && x.status !== 'faturado') x.substituidoPor = o.id; });
 };
 
 /* ---------- regras de status ---------- */
 NX.situacao = function (o) {
   if (o.status === 'faturado') return { k: 'faturado', t: 'Faturado' };
-  if (o.substituidoPor) return { k: 'invalido', t: 'Inválido · atualizado' };
   if (o.validade && o.validade >= NX.hoje()) return { k: 'valido', t: 'Válido' };
   return { k: 'vencido', t: 'Vencido' };
 };
@@ -134,7 +138,7 @@ NX.grupos = function (orcs) {
   return Object.keys(m).map(function (k) {
     var vs = m[k].sort(function (a, b) { return (b.versao || 1) - (a.versao || 1); });
     var criado = vs.map(function (x) { return x.criadoEm || ''; }).sort()[0];
-    var ativo = vs.filter(function (x) { return !x.substituidoPor; })[0] || vs[0];
+    var ativo = vs[0]; /* versão mais nova; as anteriores continuam válidas */
     return { id: k, versoes: vs, atual: ativo, criadoEm: criado, faturado: vs.some(function (x) { return x.status === 'faturado'; }),
              ultimo: vs.map(function (x) { return x.atualizadoEm || ''; }).sort().pop() };
   });
@@ -309,7 +313,7 @@ NX.paginas.inicio = function (view) {
   var comMes = ag.filter(function (a) { return a.mesComissao === mes; }).reduce(function (s, a) { return s + a.valor; }, 0);
   var alertas = [];
   gs.forEach(function (g) {
-    var o = g.atual; if (!o || g.faturado || o.substituidoPor || !o.validade) return;
+    var o = g.atual; if (!o || g.faturado || !o.validade) return;
     var dd = NX.dias(hoje, o.validade);
     if (dd >= 0 && dd <= 3) alertas.push({ o: o, d: dd, t: dd === 0 ? 'vence hoje' : dd === 1 ? 'vence amanhã' : 'vence em ' + dd + ' dias' });
     else if (dd < 0 && dd >= -7) alertas.push({ o: o, d: dd, t: 'venceu há ' + (-dd) + (dd === -1 ? ' dia' : ' dias') });

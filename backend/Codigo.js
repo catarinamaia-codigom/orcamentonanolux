@@ -25,6 +25,7 @@ var NX_CALC = (function () {
     custoFixo: 0,
     descontarForaArea: true,
     validadePadrao: 10,
+    motivosExclusao: ['Proposta repetida', 'Cliente desistiu', 'Erro de preenchimento', 'Orçamento de teste'],
     textos: {
       intro: 'NANOLUX: Resina líquida transparente de bloqueio solar para vidros | Aplicação Manual | Orçamento para bloqueio de até 99% de proteção UV e até 80% de proteção IR. Garanta 10 anos de eficiência mínima de 80%. O contrato de serviço geral deve ser consultado em www.sommar.eco.br/contratonanolux. Projetos corporativos ou com cláusulas excepcionais exigem contratos dedicados. Orçamentos com áreas enviadas pelo cliente serão atualizados com base na medição oficial no dia da instalação. Acréscimo de R$ 850,00 para aplicação noturna (até 3 dias de serviço) - Limpeza pesada pós-obra: cobrado adicional de R$ 32/m². Orçamento realizado em conformidade com a Tabela de Representação Fixa da SOMMAR.',
       obs: 'As medidas são as enviadas pelo cliente. O orçamento é passível de alteração após a medição no dia do projeto. Tolerância de 3%: Diferenças na área de até 3% (para mais ou para menos) não geram reajuste. Acima de 3%: Diferenças superiores a 3% serão ajustadas com estorno (área menor) ou cobrança de complementação (área maior).',
@@ -370,7 +371,7 @@ function nxSalvarOrcamento(u, req) {
   if (req.id) {
     o = todos.filter(function (x) { return x.id === req.id; })[0];
     if (!o || !dono(o)) throw new Error('Orçamento não encontrado.');
-    if (o.status === 'faturado' || o.substituidoPor) throw new Error('Este orçamento já foi ' + (o.status === 'faturado' ? 'faturado' : 'atualizado') + ' e não pode mais ser alterado. Use "Atualizar".');
+    if (o.status === 'faturado') throw new Error('Este orçamento já foi faturado e não pode mais ser alterado. Use "Duplicar" para criar outro a partir dele.');
   } else {
     o = { id: Utilities.getUuid(), criadoEm: agora, vendedorId: u.id, vendedor: u.nome, versao: 1 };
     if (req.atualizaDe) {
@@ -380,8 +381,7 @@ function nxSalvarOrcamento(u, req) {
       var grupo = todos.filter(function (x) { return x.grupo === ant.grupo; });
       o.grupo = ant.grupo; o.vendedorId = ant.vendedorId; o.vendedor = ant.vendedor;
       o.versao = Math.max.apply(null, grupo.map(function (x) { return x.versao || 1; })) + 1;
-      o.anteriorId = ant.id;
-      grupo.forEach(function (x) { if (!x.substituidoPor && x.status !== 'faturado') { x.substituidoPor = o.id; x.substituidoEm = agora; nxGravar('Orcamentos', x); } });
+      o.anteriorId = ant.id; /* as versões anteriores continuam valendo */
     } else o.grupo = o.id;
   }
   o.dados = d; o.atualizadoEm = agora;
@@ -394,7 +394,7 @@ function nxFaturar(u, req) {
   var cfg = nxConfig(), todos = nxLer('Orcamentos'), o = todos.filter(function (x) { return x.id === req.id; })[0];
   if (!o || (u.papel !== 'diretor' && o.vendedorId !== u.id)) throw new Error('Orçamento não encontrado.');
   if (o.status === 'faturado') throw new Error('Este orçamento já foi faturado.');
-  if (o.substituidoPor) throw new Error('Este orçamento foi atualizado por uma versão mais nova. Fature a versão atual.');
+  if (todos.some(function (x) { return x.grupo === o.grupo && x.id !== o.id && x.status === 'faturado' && !x.excluido; })) throw new Error('Outra versão deste orçamento já foi faturada.');
   var pags = nxPagamentosValidos(req.pagamentos), aj = nxAjustes(req.ajustes, u), agora = new Date().toISOString();
   var dados = aj ? NX_CALC.aplicarAjustes(o.dados, aj, cfg) : o.dados;
   var a = NX_CALC.analise(dados, cfg, pags);

@@ -34,7 +34,7 @@ NX.paginas.historico = function (view) {
       '<label class="f grow">Buscar<input type="search" id="fq" placeholder="Nome, telefone, cidade ou nº do orçamento" value="' + esc(F.q) + '"></label>' +
       '<label class="f">Emissão de<input type="date" id="fde" value="' + F.de + '"></label><label class="f">até<input type="date" id="fate" value="' + F.ate + '"></label>' +
       '<label class="f">Status<select id="fst"><option value="">Todos</option><option value="rascunho">Rascunho</option><option value="pdf">PDF baixado</option><option value="faturado">Faturado</option></select></label>' +
-      '<label class="f">Validade<select id="fsit"><option value="">Todas</option><option value="valido">Válidos</option><option value="vencido">Vencidos</option><option value="invalido">Inválidos (atualizados)</option><option value="faturado">Faturados</option><option value="dup">Possíveis duplicados</option></select></label>' +
+      '<label class="f">Validade<select id="fsit"><option value="">Todas</option><option value="valido">Válidos</option><option value="vencido">Vencidos</option><option value="faturado">Faturados</option><option value="dup">Possíveis duplicados</option></select></label>' +
       (NX.eDiretor() ? '<label class="f">Vendedor<select id="fv"><option value="">Todos</option>' + S.users.map(function (u) { return '<option value="' + esc(u.id) + '">' + esc(u.nome) + '</option>'; }).join('') + '</select></label>' : '') +
     '</div><div id="fper">' + NX.presetsPeriodo(F.per) + '</div></div>' +
     '<div class="tiles mini" id="hResumo"></div><p class="count" id="hCount"></p><div class="tbl-wrap" id="hTbl"></div></div>';
@@ -53,6 +53,7 @@ NX.paginas.historico = function (view) {
     var id = b.dataset.id;
     if (b.dataset.a === 'abrir') NX.proposta.abrir(id);
     else if (b.dataset.a === 'atualizar') NX.proposta.atualizar(id);
+    else if (b.dataset.a === 'duplicar') NX.proposta.duplicar(id);
     else if (b.dataset.a === 'faturar') NX.faturar(id);
     else if (b.dataset.a === 'verfat') NX.verFaturamento(b.dataset.fat);
     else if (b.dataset.a === 'asana') NX.vincularAsana(id, tabela);
@@ -104,14 +105,15 @@ function tabela() {
   var corpo = gs.map(function (g, gi) {
     var cor = CORES[gi % CORES.length];
     return '<tbody class="grp" style="--gc:' + cor[0] + ';--gb:' + cor[1] + '">' + g.versoes.map(function (o) {
-      var sit = NX.situacao(o), velho = sit.k === 'invalido', fat = S.fats.filter(function (f) { return f.orcamentoId === o.id; })[0];
+      var fat = S.fats.filter(function (f) { return f.orcamentoId === o.id; })[0];
       var asana = NX.url(o.asanaUrl);
       var acts = '<button class="btn tiny ghost" data-a="abrir" data-id="' + o.id + '">Abrir</button>';
-      if (!g.faturado && o === g.atual) acts += '<button class="btn tiny ghost" data-a="atualizar" data-id="' + o.id + '">Atualizar</button><button class="btn tiny dark" data-a="faturar" data-id="' + o.id + '">Faturar</button>';
+      if (!g.faturado) acts += '<button class="btn tiny ghost" data-a="atualizar" data-id="' + o.id + '" title="Cria a próxima versão a partir desta; esta continua valendo">Nova versão</button><button class="btn tiny dark" data-a="faturar" data-id="' + o.id + '">Faturar</button>';
+      acts += '<button class="btn tiny ghost" data-a="duplicar" data-id="' + o.id + '" title="Cria um orçamento novo, com outro número, a partir deste">Duplicar</button>';
       if (fat) acts += '<button class="btn tiny ghost" data-a="verfat" data-fat="' + fat.id + '" data-id="' + o.id + '">Ver faturamento</button>';
       if (o.status !== 'faturado') acts += '<button class="ibtn del" data-a="excluir" data-id="' + o.id + '" title="Excluir este orçamento">✕</button>';
       var loc = [o.local, o.projeto].filter(Boolean).map(esc).join(' · ');
-      return '<tr class="' + (velho ? 'old' : '') + '">' +
+      return '<tr>' +
         '<td class="stick"><div class="cli">' + (asana ? '<a class="cli-nome" href="' + esc(asana) + '" target="_blank" rel="noopener" title="Abrir este cliente no Asana">' + esc(o.cliente || 'Sem nome') + '</a>'
             : '<button class="cli-nome" type="button" data-a="asana" data-id="' + o.id + '" title="Vincular o link do Asana deste cliente">' + esc(o.cliente || 'Sem nome') + '</button>') +
           '<span class="nowrap">' + esc(o.telefone || 'sem telefone') + '</span>' + (loc ? '<span style="display:block">' + loc + '</span>' : '') +
@@ -138,16 +140,23 @@ function duplicados() {
 NX.excluirOrcamento = function (id, depois) {
   var o = S.orcs.filter(function (x) { return x.id === id; })[0]; if (!o) return;
   if (o.status === 'faturado') return NX.toast('Este orçamento está faturado. Exclua o faturamento primeiro.', true);
-  var ant = S.orcs.filter(function (x) { return x.substituidoPor === o.id; })[0];
+  var motivos = (S.cfg.motivosExclusao || []).filter(Boolean);
   NX.modal('<div class="modal-h"><div><h2>Excluir orçamento</h2><p>' + esc(o.cliente || 'Sem nome') + ' · ' + esc(o.numero || '') + ' ' + esc(NX.versao(o)) + ' · ' + brl(o.valorFinal) + ' · ' + NX.dataBR(o.emissao) + '</p></div><button class="btn ghost small" data-fechar>Fechar</button></div>' +
-    '<div class="modal-b"><p style="margin:0 0 12px;font-size:13.5px">O orçamento sai do histórico e dos resumos.' + (ant ? ' A versão anterior (<b>' + esc(NX.versao(ant)) + '</b>) volta a valer.' : '') + ' A exclusão fica registrada na planilha.</p>' +
-    '<label class="f">Motivo <span class="hint">(opcional)</span><input type="text" id="eoMot" placeholder="Ex.: proposta repetida"></label><div class="err" id="eoErr" style="margin-top:8px"></div></div>' +
-    '<div class="modal-f"><button class="btn ghost" data-fechar>Cancelar</button><button class="btn danger" id="eoOk" type="button">Excluir orçamento</button></div>',
+    '<div class="modal-b"><p style="margin:0 0 12px;font-size:13.5px">O orçamento sai do histórico e dos resumos. As outras versões não mudam. A exclusão fica registrada na planilha.</p>' +
+    '<label class="f"><span>Motivo <span style="color:var(--danger)">*</span></span><select id="eoSel"><option value="">Escolha o motivo…</option>' + motivos.map(function (x) { return '<option>' + esc(x) + '</option>'; }).join('') + '<option value="__outro">Outro (escrever)</option></select></label>' +
+    '<label class="f" id="eoOutroBox" style="margin-top:10px" hidden>Qual motivo?<input type="text" id="eoMot" placeholder="Descreva o motivo"></label>' +
+    '<label class="f" style="margin-top:10px">Detalhe <span class="hint">(opcional)</span><input type="text" id="eoDet" placeholder="Ex.: ficou o ORC-… V02"></label><div class="err" id="eoErr" style="margin-top:8px"></div></div>' +
+    '<div class="modal-f"><button class="btn ghost" data-fechar>Cancelar</button><button class="btn danger" id="eoOk" type="button" disabled>Excluir orçamento</button></div>',
     function (m, fechar) {
       m.style.maxWidth = '560px';
-      $('#eoOk', m).onclick = function () {
-        var b = this; b.disabled = true;
-        NX.api('excluirOrcamento', { id: id, motivo: $('#eoMot', m).value.trim() }).then(function (r) {
+      var sel = $('#eoSel', m), outro = $('#eoMot', m), ok = $('#eoOk', m);
+      var motivo = function () { return sel.value === '__outro' ? outro.value.trim() : sel.value; };
+      var checar = function () { $('#eoOutroBox', m).hidden = sel.value !== '__outro'; ok.disabled = !motivo(); };
+      sel.onchange = function () { checar(); if (sel.value === '__outro') outro.focus(); };
+      outro.oninput = checar;
+      ok.onclick = function () {
+        var b = this, det = $('#eoDet', m).value.trim(); if (!motivo()) return; b.disabled = true;
+        NX.api('excluirOrcamento', { id: id, motivo: motivo() + (det ? ' — ' + det : '') }).then(function (r) {
           S.orcs = S.orcs.filter(function (x) { return x.id !== id; });
           (r.orcamentos || []).forEach(function (x) { if (x.id !== id && !x.excluido) NX.atualizarLocal(x); });
           fechar(); NX.toast('Orçamento excluído');
@@ -281,7 +290,7 @@ NX.faturar = function (id) {
   var o = S.orcs.filter(function (x) { return x.id === id; })[0];
   if (!o) return NX.toast('Orçamento não encontrado', true);
   if (o.status === 'faturado') return NX.toast('Este orçamento já foi faturado.', true);
-  if (o.substituidoPor) return NX.toast('Existe uma versão mais nova deste orçamento. Fature a versão atual.', true);
+  if (S.orcs.some(function (x) { return x.grupo === o.grupo && x.id !== o.id && x.status === 'faturado'; })) return NX.toast('Outra versão deste orçamento já foi faturada.', true);
   var a0 = C.analise(o.dados, S.cfg), h = NX.hoje();
   modalPagamentos({
     orc: o, titulo: 'Faturar projeto', botao: 'Confirmar faturamento',

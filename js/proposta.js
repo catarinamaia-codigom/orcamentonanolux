@@ -50,21 +50,37 @@ P.abrir = function (id) {
   var o = reg(id); if (!o) return NX.toast('Orçamento não encontrado', true);
   if (state && meta && meta.sujo && meta.id !== id && !confirm('Há alterações não salvas no orçamento aberto. Abrir outro mesmo assim?')) return;
   state = completar(o.dados);
-  meta = { id: o.id, status: o.status, versaoN: o.versao || 1, grupo: o.grupo, vendedor: o.vendedor, ro: o.status === 'faturado' || !!o.substituidoPor, salvoEm: o.atualizadoEm };
+  meta = { id: o.id, status: o.status, versaoN: o.versao || 1, grupo: o.grupo, vendedor: o.vendedor, ro: o.status === 'faturado', salvoEm: o.atualizadoEm };
   salvarLocal(); NX.ir('proposta');
 };
-P.atualizar = function (id, semConfirmar) {
+/* Nova versão: copia o orçamento aberto (com o que já foi editado na tela) ou o escolhido no histórico.
+   As versões anteriores continuam valendo; nada é gravado por cima delas. */
+P.atualizar = function (id, semConfirmar, daTela) {
   var o = reg(id); if (!o) return NX.toast('Orçamento não encontrado', true);
   var g = NX.grupos().filter(function (x) { return x.id === o.grupo; })[0];
-  if (g.faturado) return NX.toast('Este orçamento já foi faturado.', true);
-  if (!semConfirmar && state && meta && meta.sujo && !confirm('Há alterações não salvas no orçamento aberto. Continuar mesmo assim?')) return;
-  var atual = g.atual, n = Math.max.apply(null, g.versoes.map(function (x) { return x.versao || 1; })) + 1;
-  state = completar(atual.dados);
+  if (g.faturado) return NX.toast('Este orçamento já foi faturado. Use "Duplicar" para criar outro a partir dele.', true);
+  var usarTela = daTela && state && meta && meta.id === id;
+  if (!usarTela && !semConfirmar && state && meta && meta.sujo && !confirm('Há alterações não salvas no orçamento aberto. Continuar mesmo assim?')) return;
+  var n = NX.proximaVersao(g.id);
+  state = completar(usarTela ? state : o.dados);
   state.emissao = NX.hoje(); state.versao = 'V' + pad(n);
-  state.anteriores = g.versoes.slice().reverse().map(function (x) { return 'V' + pad(x.versao || 1); }).join(', ');
-  meta = { id: null, atualizaDe: atual.id, status: null, versaoN: n, grupo: g.id, vendedor: atual.vendedor, ro: false, sujo: true };
+  state.anteriores = g.versoes.slice().reverse().map(function (x) { return NX.versao(x); }).join(', ');
+  meta = { id: null, atualizaDe: o.id, status: null, versaoN: n, grupo: g.id, vendedor: o.vendedor, ro: false, sujo: true };
   salvarLocal(); NX.ir('proposta');
-  NX.toast('Nova versão V' + pad(n) + ' — ajuste e salve. A anterior ficará inválida.');
+  NX.toast('Nova versão V' + pad(n) + ' criada a partir da ' + NX.versao(o) + '. Ajuste e salve — a ' + NX.versao(o) + ' continua no histórico.');
+};
+/* Duplicar: cópia com número novo, como um orçamento novo (o original não muda) */
+P.duplicar = function (id) {
+  var o = id ? reg(id) : null, daTela = !id || (meta && meta.id === id);
+  if (!daTela && !o) return NX.toast('Orçamento não encontrado', true);
+  if (!daTela && state && meta && meta.sujo && !confirm('Há alterações não salvas no orçamento aberto. Duplicar outro mesmo assim?')) return;
+  var base = daTela ? state : o.dados, orig = daTela ? (state.numero + ' ' + (state.versao || '')) : (o.numero + ' ' + NX.versao(o));
+  state = completar(base);
+  var e = NX.hoje();
+  state.numero = novoNumero(e); state.emissao = e; state.versao = 'V01'; state.anteriores = 'Primeira proposta';
+  meta = { id: null, novoProjeto: true, status: null, ro: false, sujo: true, copiaDe: orig.trim() };
+  salvarLocal(); NX.ir('proposta');
+  NX.toast('Cópia criada com o nº ' + state.numero + '. Ajuste e salve — o original não muda.');
 };
 P.estado = function () { return state; };
 P.limpar = function () { state = null; meta = null; preview = null; };
@@ -344,11 +360,11 @@ function perguntarCliente(gs, seguir, cancelar) {
   var decidiu = false;
   NX.modal('<div class="modal-h"><div><h2>Esse cliente já tem orçamento</h2><p>Encontrei ' + (gs.length === 1 ? 'um orçamento' : gs.length + ' orçamentos') + ' com o mesmo nome ou telefone. É um projeto novo ou a atualização de um orçamento antigo?</p></div><button class="btn ghost small" data-fechar>Fechar</button></div>' +
     '<div class="modal-b"><div class="dup-list">' + gs.slice(0, 6).map(function (g) {
-      var o = g.atual, n = Math.max.apply(null, g.versoes.map(function (x) { return x.versao || 1; })) + 1;
+      var o = g.atual, n = NX.proximaVersao(g.id);
       return '<div class="dup-item"><div class="t"><b>' + esc(o.cliente || 'Sem nome') + '</b><span>' + esc(o.telefone || 'sem telefone') + (o.local ? ' · ' + esc(o.local) : '') + '</span>' +
-        '<span>' + esc(o.numero) + ' V' + pad(o.versao || 1) + ' · ' + NX.dataBR(o.emissao) + ' · <b>' + brl(o.valorFinal) + '</b></span><span class="ant-tags">' + NX.statusTag(o) + (o.status === 'faturado' ? '' : NX.situacaoTag(o)) + '</span></div>' +
+        '<span>' + esc(o.numero) + ' ' + esc(NX.versao(o)) + ' · ' + NX.dataBR(o.emissao) + ' · <b>' + brl(o.valorFinal) + '</b></span><span class="ant-tags">' + NX.statusTag(o) + (o.status === 'faturado' ? '' : NX.situacaoTag(o)) + '</span></div>' +
         (g.faturado ? '<span class="muted" style="font-size:12px;max-width:150px;text-align:right">Já faturado: crie como projeto novo</span>' : '<button class="btn dark small" type="button" data-dupatual="' + o.id + '">Atualizar este (V' + pad(n) + ')</button>') + '</div>';
-    }).join('') + '</div><p class="muted" style="font-size:12.5px;margin:12px 0 0">Atualizar carrega o orçamento antigo como nova versão, com o mesmo número; a versão anterior fica inválida.</p></div>' +
+    }).join('') + '</div><p class="muted" style="font-size:12.5px;margin:12px 0 0">Atualizar carrega o orçamento antigo como nova versão, com o mesmo número. As versões anteriores continuam no histórico, valendo.</p></div>' +
     '<div class="modal-f"><button class="btn ghost" data-fechar>Decidir depois</button><button class="btn primary" id="dupNovo" type="button">É um projeto novo</button></div>',
     function (m, fechar) {
       m.style.maxWidth = '720px';
@@ -368,20 +384,24 @@ function barra() {
   var o = meta.id ? reg(meta.id) : null, h = '', ro = !!meta.ro;
   if (meta.atualizaDe) {
     var ant = reg(meta.atualizaDe);
-    h = '<span class="tag rascunho">Nova versão ' + esc(state.versao || 'V' + pad(meta.versaoN)) + '</span><span>Atualizando <b>' + esc(state.numero) + '</b>' + (ant ? ' (' + esc(NX.versao(ant)) + ')' : '') + '. Ao salvar, a versão anterior fica <b>inválida</b>.</span>';
+    h = '<span class="tag rascunho">Nova versão ' + esc(state.versao || 'V' + pad(meta.versaoN)) + '</span><span>Criada a partir da <b>' + esc(ant ? NX.versao(ant) : '') + '</b> do <b>' + esc(ant ? ant.numero : state.numero) + '</b>. Ao salvar, vira um registro novo; as versões anteriores continuam valendo.</span>';
   } else if (o) {
     h = NX.statusTag(o) + NX.situacaoTag(o) + '<span><b>' + esc(NX.versao(o)) + '</b> · salvo em ' + NX.dataBR(String(o.atualizadoEm).slice(0, 10)) + ' ' + String(new Date(o.atualizadoEm).toTimeString()).slice(0, 5) + (NX.eDiretor() && o.vendedor ? ' · ' + esc(o.vendedor) : '') + '</span>';
-    if (ro) h += '<span class="muted">' + (o.status === 'faturado' ? 'Faturado: só leitura.' : 'Existe uma versão mais nova: só leitura.') + '</span>';
-  } else h = '<span class="tag invalido">Novo</span><span class="muted">Ainda não salvo.</span>';
+    if (ro) h += '<span class="muted">Faturado: só leitura. Use “Duplicar” para criar outro a partir dele.</span>';
+    else if (vaiVirarNovo()) h += '<span class="tag valido">vai salvar como nova versão</span><span class="muted">Você mudou a versão ou o número: ao salvar, cria um registro novo e o <b>' + esc(NX.versao(o)) + '</b> continua no histórico.</span>';
+  } else h = '<span class="tag invalido">Novo</span><span class="muted">' + (meta.copiaDe ? 'Cópia de ' + esc(meta.copiaDe) + ' — ainda não salva.' : 'Ainda não salvo.') + '</span>';
   if (salvando) h += '<span class="tag valido"><span class="spinner spin-sm" style="width:11px;height:11px;border-width:2px"></span> salvando…</span>';
   else if (meta.sujo && !ro) h += '<span class="tag alerta">alterações não salvas</span>';
   h += '<span class="sp"></span>';
-  if (o && !meta.atualizaDe && o.status !== 'faturado') h += '<button class="btn tiny ghost" id="sbAtual" type="button">Atualizar (nova versão)</button>';
-  if (o && !ro && o.status !== 'faturado') h += '<button class="btn tiny ghost" id="sbFat" type="button">Faturar</button>';
+  var gFat = o && S.orcs.some(function (x) { return x.grupo === o.grupo && x.status === 'faturado'; });
+  if (o && !gFat) h += '<button class="btn tiny ghost" id="sbAtual" type="button" title="Cria a próxima versão a partir do que está na tela; esta versão continua como está">Nova versão</button>';
+  if (o || meta.atualizaDe) h += '<button class="btn tiny ghost" id="sbDup" type="button" title="Cria um orçamento novo, com outro número, a partir deste">Duplicar</button>';
+  if (o && !ro && !gFat) h += '<button class="btn tiny ghost" id="sbFat" type="button">Faturar</button>';
   if (o && o.status !== 'faturado') h += '<button class="btn tiny danger" id="sbDel" type="button">Excluir</button>';
   el.innerHTML = h; el.classList.toggle('ro', ro);
   renderAnteriores();
-  var a = $('#sbAtual'); if (a) a.onclick = function () { P.atualizar(o.id); };
+  var a = $('#sbAtual'); if (a) a.onclick = function () { P.atualizar(o.id, true, true); };
+  var dp = $('#sbDup'); if (dp) dp.onclick = function () { P.duplicar(); };
   var f = $('#sbFat'); if (f) f.onclick = function () { if (meta.sujo) return NX.toast('Salve as alterações antes de faturar.', true); NX.faturar(o.id); };
   var dl = $('#sbDel'); if (dl) dl.onclick = function () { NX.excluirOrcamento(o.id, function () { state = padrao(); meta = {}; salvarLocal(); NX.ir('proposta'); }); };
   var form = $('#form'); if (form) form.classList.toggle('ro', ro);
@@ -607,10 +627,17 @@ function salvar(pdf) {
   }
   return salvarDeFato(pdf);
 }
+/* orçamento já salvo em que a versão ou o número foram trocados: salvar cria um registro novo em vez de gravar por cima */
+function vaiVirarNovo() {
+  if (!meta || !meta.id || meta.ro) return false;
+  var o = reg(meta.id); if (!o) return false;
+  var vTela = NX.norm(NX.versao({ dados: state, versao: o.versao })), vSalvo = NX.norm(NX.versao(o));
+  return vTela !== vSalvo || String(state.numero || '').trim() !== String((o.dados && o.dados.numero) || o.numero || '').trim();
+}
 /* fila: um salvamento por vez, sempre com o id mais recente (evita orçamentos repetidos) */
 var fila = Promise.resolve(), salvando = 0;
 function salvarDeFato(pdf) {
-  if (meta.ro) { NX.toast('Este orçamento é só leitura. Use "Atualizar" para criar uma nova versão.', true); return Promise.reject(new Error('ro')); }
+  if (meta.ro) { NX.toast('Este orçamento está faturado e é só leitura. Use "Duplicar" para criar outro a partir dele.', true); return Promise.reject(new Error('ro')); }
   salvando++; barra();
   var p = fila.then(function () { return salvarAgora(pdf); });
   fila = p.catch(function () {});
@@ -620,12 +647,15 @@ function salvarAgora(pdf) {
   var btn = $('#pSalvar'); if (btn) btn.disabled = true;
   meta.sujoDepois = false;
   clearTimeout(tmr);
-  return NX.api('salvarOrcamento', { id: meta.id || undefined, atualizaDe: meta.atualizaDe || undefined, dados: state, pdf: !!pdf }).then(function (r) {
+  var novo = vaiVirarNovo(), req = novo ? { atualizaDe: meta.id } : { id: meta.id || undefined, atualizaDe: meta.atualizaDe || undefined };
+  req.dados = state; req.pdf = !!pdf;
+  return NX.api('salvarOrcamento', req).then(function (r) {
     var o = r.orcamento;
+    if (novo) NX.toast('Salvo como nova versão (' + NX.versao(o) + '). A versão anterior continua no histórico.');
     var sujo = meta.sujoDepois || false;
     meta = { id: o.id, status: o.status, versaoN: o.versao, grupo: o.grupo, vendedor: o.vendedor, ro: false, sujo: sujo, salvoEm: o.atualizadoEm };
     NX.atualizarLocal(o); salvarLocal(); barra();
-    if (!pdf) NX.toast('Salvo no histórico como Rascunho');
+    if (!pdf && !novo) NX.toast('Salvo no histórico como Rascunho');
     return o;
   }).catch(function (e) { NX.toast('Não foi possível salvar: ' + e.message, true); throw e; })
     .then(function (o) { if (btn) btn.disabled = !!meta.ro; return o; }, function (e) { if (btn) btn.disabled = !!meta.ro; throw e; });

@@ -21,6 +21,8 @@ NX.paginas.diretoria = function (view) {
         '<label class="f">Validade padrão do orçamento (dias)<input type="number" min="1" id="dVal"></label>' +
         '<label class="chk full"><input type="checkbox" id="dFora"> Descontar os itens que não somam área (ex.: Protocolo técnico) como custo fixo</label>' +
         '<p class="muted full" style="margin:0;font-size:12.5px">m² efetivo = (valor total − custos fixos − desconto − taxas) ÷ área. Abaixo da referência do produto, o vendedor vê o aviso de que precisa de autorização.</p></div></div>' +
+      '<div class="card"><h2>Motivos de exclusão de orçamento</h2><p class="muted" style="margin:-6px 0 12px;font-size:12.5px">Aparecem como opções quando alguém exclui um orçamento. Um por linha. A opção “Outro (escrever)” sempre aparece no fim.</p>' +
+        '<label class="f full"><textarea id="dMotivos" rows="5" placeholder="Proposta repetida"></textarea></label></div>' +
       '<div class="card"><h2>Links</h2><div class="grid">' +
         '<label class="f full">Asana da SOMMAR (botão do menu)<input type="url" id="dAsana" placeholder="https://app.asana.com/…"></label>' +
         '<label class="f full">WhatsApp do botão “negociar” no PDF <span class="hint">(só números, com DDI)</span><input type="text" inputmode="numeric" id="dWa"></label></div></div>' +
@@ -60,6 +62,7 @@ NX.paginas.diretoria = function (view) {
   var tx = cfg.textos || {};
   $('#tIntro').value = tx.intro || ''; $('#tObs').value = tx.obs || ''; $('#tPagR').value = tx.pagResumo || ''; $('#tPagD').value = tx.pagDetalhe || '';
   $('#tPrazo').value = tx.prazo || ''; $('#tExec').value = tx.execucao || ''; $('#tInfos').value = (tx.infos || []).join('\n');
+  $('#dMotivos').value = (cfg.motivosExclusao || C.CONFIG_PADRAO.motivosExclusao || []).join('\n');
   $('#tExProj').value = tx.exProjeto || ''; $('#tExLocal').value = tx.exLocal || ''; $('#tExArea').value = tx.exArea || ''; $('#tExDesc').value = tx.exDesconto || '';
   $$('[data-tturno]').forEach(function (c) { c.checked = (tx.turnos || []).indexOf(c.dataset.tturno) >= 0; });
   tabelas = (cfg.tabelasTaxas || []).map(function (t) { return { desde: t.desde, taxas: JSON.parse(JSON.stringify(t.taxas)), comissaoPct: t.comissaoPct != null ? t.comissaoPct : cfg.comissaoPct }; });
@@ -154,6 +157,7 @@ function salvarCfg() {
   cfg.modoParcelado = $('#dModo').value; cfg.custoFixo = num($('#dFixo').value);
   cfg.validadePadrao = Math.max(1, Math.round(num($('#dVal').value) || 10)); cfg.descontarForaArea = $('#dFora').checked;
   cfg.asanaUrl = $('#dAsana').value.trim(); cfg.whatsapp = NX.digitos($('#dWa').value);
+  cfg.motivosExclusao = $('#dMotivos').value.split('\n').map(function (x) { return x.trim(); }).filter(function (x, i, l) { return x && l.indexOf(x) === i; });
   lerTabelas();
   var datas = tabelas.map(function (t) { return t.desde; });
   if (datas.some(function (d) { return !/^\d{4}-\d{2}-\d{2}$/.test(d); })) return NX.toast('Preencha a data de início de todas as tabelas de taxas.', true);
